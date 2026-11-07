@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="fr" class="h-full bg-slate-900 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guide Audio GPS - Découverte Locale</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        
+        /* Custom Pulse Wave Animation for Listening state */
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.1); opacity: 0.4; }
+            100% { transform: scale(0.95); opacity: 0.8; }
+        }
+        .pulse-active {
+            animation: pulse-ring 2s infinite ease-in-out;
+        }
+
+        /* Equalizer Bars Animation */
+        .eq-bar {
+            width: 4px;
+            background-color: #3b82f6;
+            animation: eq 1s ease-in-out infinite alternate;
+        }
+        .eq-bar:nth-child(1) { height: 16px; animation-delay: 0.1s; }
+        .eq-bar:nth-child(2) { height: 28px; animation-delay: 0.3s; }
+        .eq-bar:nth-child(3) { height: 20px; animation-delay: 0.2s; }
+        .eq-bar:nth-child(4) { height: 32px; animation-delay: 0.4s; }
+        .eq-bar:nth-child(5) { height: 12px; animation-delay: 0.15s; }
+
+        @keyframes eq {
+            0% { transform: scaleY(0.3); }
+            100% { transform: scaleY(1.1); }
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(51, 65, 85, 0.8);
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col justify-between bg-gradient-to-b from-slate-950 via-slate-900 to-indigo-950 min-h-screen text-slate-100 antialiased selection:bg-indigo-500 selection:text-white">
+
+    <!-- Header Section -->
+    <header class="w-full max-w-2xl mx-auto px-4 pt-6 pb-2 text-center">
+        <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold uppercase tracking-wider mb-2">
+            <i class="fa-solid me-1 fa-compass animate-spin-slow"></i> Explorateur Audio IA
+        </div>
+        <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent">
+            Où suis-je ?
+        </h1>
+        <p class="text-sm text-slate-400 mt-1 max-w-md mx-auto">
+            Découvrez l'histoire, la culture et les curiosités de votre position actuelle grâce à votre guide audio intelligent.
+        </p>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="w-full max-w-2xl mx-auto px-4 flex-1 flex flex-col items-center justify-center gap-6 my-4">
+        
+        <!-- Action Button & Interactive Center -->
+        <div class="relative flex flex-col items-center justify-center my-2">
+            <!-- Glow background effect -->
+            <div id="btn-glow" class="absolute w-44 h-44 rounded-full bg-indigo-600/20 blur-xl transition-all duration-500"></div>
+
+            <!-- Big Listen Button -->
+            <button id="listen-btn" onclick="startAudioGuideSequence()" class="relative z-10 w-36 h-36 rounded-full bg-gradient-to-tr from-indigo-600 via-indigo-500 to-blue-500 hover:from-indigo-500 hover:to-blue-400 active:scale-95 shadow-xl shadow-indigo-900/40 border-4 border-slate-900/50 flex flex-col items-center justify-center transition-all duration-300 group cursor-pointer focus:outline-none focus:ring-4 focus:ring-indigo-500/50">
+                <div id="btn-icon-container" class="flex flex-col items-center">
+                    <i id="btn-icon" class="fa-solid fa-volume-high text-4xl text-white group-hover:scale-110 transition-transform duration-300"></i>
+                    <span id="btn-label" class="mt-2 text-sm font-bold uppercase tracking-wider text-white">Écouter</span>
+                </div>
+                <!-- Spinner loader (hidden by default) -->
+                <div id="btn-spinner" class="hidden">
+                    <i class="fa-solid fa-circle-notch fa-spin text-4xl text-white"></i>
+                </div>
+            </button>
+
+            <!-- Status Indicator Badge below button -->
+            <div id="status-badge" class="mt-4 px-4 py-1.5 rounded-full bg-slate-800/80 border border-slate-700/60 text-xs font-medium text-slate-300 flex items-center gap-2 shadow-sm backdrop-blur-md">
+                <span id="status-dot" class="w-2 h-2 rounded-full bg-slate-500"></span>
+                <span id="status-text">Prêt. Appuyez sur Écouter pour démarrer.</span>
+            </div>
+        </div>
+
+        <!-- Audio Playback Controls Bar (Appears during/after playback) -->
+        <div id="audio-controls-card" class="w-full bg-slate-800/60 backdrop-blur-md rounded-2xl p-4 border border-slate-700/50 shadow-lg flex flex-col gap-3 transition-all duration-300 opacity-60 pointer-events-none">
+            
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <!-- Dynamic Sound Waves Icon -->
+                    <div id="equalizer-waves" class="flex items-center gap-1 h-8 opacity-40">
+                        <div class="eq-bar rounded-full"></div>
+                        <div class="eq-bar rounded-full"></div>
+                        <div class="eq-bar rounded-full"></div>
+                        <div class="eq-bar rounded-full"></div>
+                        <div class="eq-bar rounded-full"></div>
+                    </div>
+                    <div>
+                        <h2 class="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Lecteur Vocal</h2>
+                        <p id="audio-playback-status" class="text-sm font-medium text-slate-200">En attente...</p>
+                    </div>
+                </div>
+
+                <!-- Action Buttons: Pause / Resume / Stop -->
+                <div class="flex items-center gap-2">
+                    <button id="pause-btn" onclick="togglePauseResume()" disabled class="p-2.5 rounded-xl bg-slate-700/80 hover:bg-slate-700 text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus:outline-none" title="Pause / Reprendre">
+                        <i id="pause-icon" class="fa-solid fa-pause"></i>
+                    </button>
+                    <button id="stop-btn" onclick="stopAudio()" disabled class="p-2.5 rounded-xl bg-rose-900/30 hover:bg-rose-800/50 text-rose-300 border border-rose-700/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus:outline-none" title="Arrêter">
+                        <i class="fa-solid fa-square"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Voice and Speed settings (collapsible / minimalist) -->
+            <div class="pt-2 border-t border-slate-700/40 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div>
+                    <label for="voice-select" class="block text-slate-400 font-medium mb-1">Voix française</label>
+                    <select id="voice-select" onchange="updateVoiceSettings()" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500">
+                        <option value="">Chargement des voix...</option>
+                    </select>
+                </div>
+                <div>
+                    <div class="flex justify-between text-slate-400 font-medium mb-1">
+                        <label for="speed-rate">Vitesse de lecture</label>
+                        <span id="speed-value" class="text-indigo-400 font-bold">1x</span>
+                    </div>
+                    <input type="range" id="speed-rate" min="0.7" max="1.4" step="0.1" value="1" oninput="updateSpeedValue(this.value)" class="w-full accent-indigo-500 bg-slate-900 rounded-lg cursor-pointer">
+                </div>
+            </div>
+        </div>
+
+        <!-- Location & Generated Description Card -->
+        <div class="w-full bg-slate-800/40 backdrop-blur-md rounded-2xl p-5 border border-slate-700/50 shadow-xl flex flex-col gap-4">
+            
+            <!-- Location Details Header -->
+            <div class="flex items-start justify-between border-b border-slate-700/50 pb-3">
+                <div class="flex items-center gap-3">
+                    <div class="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                        <i class="fa-solid fa-location-dot text-lg"></i>
+                    </div>
+                    <div>
+                        <h3 id="location-name" class="font-bold text-slate-100 text-base">Position non détectée</h3>
+                        <p id="location-address" class="text-xs text-slate-400 mt-0.5">Cliquez sur « Écouter » pour obtenir votre adresse.</p>
+                    </div>
+                </div>
+                <div id="coords-badge" class="hidden sm:flex flex-col items-end text-[10px] text-slate-400 font-mono bg-slate-900/60 px-2.5 py-1.5 rounded-lg border border-slate-700/40">
+                    <span id="lat-val">Lat: --</span>
+                    <span id="lon-val">Lon: --</span>
+                </div>
+            </div>
+
+            <!-- Speech Output Text Area -->
+            <div class="relative">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <i class="fa-solid fa-sparkles text-amber-400"></i> Récit Touristique Gemini
+                    </span>
+                    <button id="copy-btn" onclick="copyTextToClipboard()" title="Copier le texte" class="hidden text-xs text-slate-400 hover:text-indigo-300 transition-colors">
+                        <i class="fa-regular fa-copy"></i> Copier
+                    </button>
+                </div>
+                
+                <div id="description-box" class="min-h-[120px] max-h-[220px] overflow-y-auto pr-2 text-sm leading-relaxed text-slate-300 font-normal bg-slate-900/50 rounded-xl p-4 border border-slate-800/80">
+                    <p class="text-slate-500 italic">Le texte généré par l'intelligence artificielle apparaîtra ici et sera lu automatiquement...</p>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="w-full max-w-2xl mx-auto px-4 py-4 text-center text-xs text-slate-500">
+        Développé avec Web Geolocation API, OpenStreetMap Nominatim, Gemini API & Web Speech API.
+    </footer>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 max-w-sm bg-slate-800 border border-slate-700 text-slate-200 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3">
+        <i id="toast-icon" class="fa-solid fa-circle-info text-indigo-400 text-lg"></i>
+        <span id="toast-message" class="text-xs">Message</span>
+    </div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // Global Application State Variables
+        let currentLatitude = null;
+        let currentLongitude = null;
+        let locationDetails = null;
+        let generatedStoryText = "";
+        
+        // Speech Synthesis setup
+        const synth = window.speechSynthesis;
+        let availableVoices = [];
+        let selectedVoice = null;
+        let speechUtterance = null;
+        let isPaused = false;
+
+        // UI Element References
+        const listenBtn = document.getElementById('listen-btn');
+        const btnIcon = document.getElementById('btn-icon');
+        const btnLabel = document.getElementById('btn-label');
+        const btnSpinner = document.getElementById('btn-spinner');
+        const btnGlow = document.getElementById('btn-glow');
+        
+        const statusBadge = document.getElementById('status-badge');
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+
+        const audioControlsCard = document.getElementById('audio-controls-card');
+        const audioPlaybackStatus = document.getElementById('audio-playback-status');
+        const pauseBtn = document.getElementById('pause-btn');
+        const pauseIcon = document.getElementById('pause-icon');
+        const stopBtn = document.getElementById('stop-btn');
+        const equalizerWaves = document.getElementById('equalizer-waves');
+
+        const voiceSelect = document.getElementById('voice-select');
+        const speedRateInput = document.getElementById('speed-rate');
+        const speedValueDisplay = document.getElementById('speed-value');
+
+        const locationName = document.getElementById('location-name');
+        const locationAddress = document.getElementById('location-address');
+        const latVal = document.getElementById('lat-val');
+        const lonVal = document.getElementById('lon-val');
+        const coordsBadge = document.getElementById('coords-badge');
+        const descriptionBox = document.getElementById('description-box');
+        const copyBtn = document.getElementById('copy-btn');
+
+        // Initialize Speech Voices when window loads
+        window.onload = () => {
+            initVoices();
+            if (speechSynthesis.onvoiceschanged !== undefined) {
+                speechSynthesis.onvoiceschanged = initVoices;
+            }
+        };
+
+        // Load available French voices for Web Speech API
+        function initVoices() {
+            availableVoices = synth.getVoices().filter(v => v.lang.startsWith('fr'));
+            
+            // Fallback if no French voice, load all
+            const voicesToDisplay = availableVoices.length > 0 ? availableVoices : synth.getVoices();
+
+            voiceSelect.innerHTML = '';
+            if (voicesToDisplay.length === 0) {
+                const opt = document.createElement('option');
+                opt.textContent = "Voix par défaut du système";
+                voiceSelect.appendChild(opt);
+                return;
+            }
+
+            voicesToDisplay.forEach((voice, index) => {
+                const option = document.createElement('option');
+                option.textContent = `${voice.name} (${voice.lang})`;
+                option.value = index;
+                if (voice.default || voice.lang === 'fr-FR' || voice.lang === 'fr_FR') {
+                    option.selected = true;
+                    selectedVoice = voice;
+                }
+                voiceSelect.appendChild(option);
+            });
+
+            if (!selectedVoice && voicesToDisplay.length > 0) {
+                selectedVoice = voicesToDisplay[0];
+            }
+        }
+
+        function updateVoiceSettings() {
+            const index = voiceSelect.value;
+            const voicesToDisplay = availableVoices.length > 0 ? availableVoices : synth.getVoices();
+            if (voicesToDisplay[index]) {
+                selectedVoice = voicesToDisplay[index];
+                showToast("Voix mise à jour : " + selectedVoice.name);
+            }
+        }
+
+        function updateSpeedValue(val) {
+            speedValueDisplay.textContent = `${val}x`;
+        }
+
+        // Master Flow Triggered on "Écouter" Button Click
+        async function startAudioGuideSequence() {
+            // Stop any ongoing speech
+            stopAudio();
+
+            // Set Loading UI State
+            setUIStateLoading(true);
+            updateStatus("Acquisition de votre position GPS...", "yellow");
+
+            try {
+                // Step 1: Obtain User's GPS Location
+                const position = await getGPSCoordinates();
+                currentLatitude = position.coords.latitude;
+                currentLongitude = position.coords.longitude;
+
+                latVal.textContent = `Lat: ${currentLatitude.toFixed(5)}`;
+                lonVal.textContent = `Lon: ${currentLongitude.toFixed(5)}`;
+                coordsBadge.classList.remove('hidden');
+
+                // Step 2: Reverse Geocode via OpenStreetMap Nominatim
+                updateStatus("Recherche des détails du lieu...", "indigo");
+                locationDetails = await fetchReverseGeocoding(currentLatitude, currentLongitude);
+
+                // Update UI location header
+                updateLocationHeader(locationDetails);
+
+                // Step 3: Call Gemini API to generate story
+                updateStatus("Rédaction du récit audio par l'IA...", "indigo");
+                generatedStoryText = await fetchGeminiStory(locationDetails, currentLatitude, currentLongitude);
+
+                // Display generated text
+                descriptionBox.innerHTML = `<p class="text-slate-100 font-medium">${generatedStoryText}</p>`;
+                copyBtn.classList.remove('hidden');
+
+                // Step 4: Play Speech Synthesis Audio
+                updateStatus("Lecture audio en cours...", "emerald");
+                speakText(generatedStoryText);
+
+            } catch (error) {
+                console.error("Erreur dans la séquence:", error);
+                showToast(error.message || "Une erreur s'est produite.", "error");
+                updateStatus("Erreur : " + (error.message || "Échec"), "rose");
+                
+                // Fallback attempt: read address if Gemini fails
+                if (locationDetails && locationDetails.display_name) {
+                    const fallbackText = `Vous vous trouvez à l'adresse suivante : ${locationDetails.display_name}. Impossible de charger le guide audio complet.`;
+                    descriptionBox.innerHTML = `<p class="text-rose-300 font-medium">${fallbackText}</p>`;
+                    speakText(fallbackText);
+                } else {
+                    descriptionBox.innerHTML = `<p class="text-rose-400">Impossible de récupérer les informations de localisation ou de générer l'audio. Veuillez vérifier vos autorisations GPS.</p>`;
+                }
+            } finally {
+                setUIStateLoading(false);
+            }
+        }
+
+        // Get GPS Position Promise Wrapper
+        function getGPSCoordinates() {
+            return new Promise((resolve, reject) => {
+                if (!navigator.geolocation) {
+                    reject(new Error("La géolocalisation n'est pas supportée par votre navigateur."));
+                    return;
+                }
+
+                navigator.geolocation.getCurrentPosition(
+                    position => resolve(position),
+                    error => {
+                        let errMsg = "Erreur de géolocalisation inconnue.";
+                        switch (error.code) {
+                            case error.PERMISSION_DENIED:
+                                errMsg = "Permission GPS refusée. Veuillez l'activer dans votre navigateur.";
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                errMsg = "Position GPS indisponible.";
+                                break;
+                            case error.TIMEOUT:
+                                errMsg = "Délai d'attente dépassé pour la position GPS.";
+                                break;
+                        }
+                        reject(new Error(errMsg));
+                    },
+                    { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+                );
+            });
+        }
+
+        // OpenStreetMap Nominatim Reverse Geocoding API Call
+        async function fetchReverseGeocoding(lat, lon) {
+            const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1&accept-language=fr`;
+            const response = await fetch(url, {
+                headers: {
+                    'User-Agent': 'AudioGPSGuideApp/1.0'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error("Impossible d'obtenir le nom de l'adresse (OpenStreetMap).");
+            }
+            return await response.json();
+        }
+
+        // Update Location Details on Card
+        function updateLocationHeader(geoData) {
+            const addr = geoData.address || {};
+            
+            // Determine primary readable title (Landmark, Road, Quarter, City)
+            const mainName = addr.tourism || addr.historic || addr.amenity || addr.building || addr.road || addr.suburb || addr.city || addr.town || "Lieu détecté";
+            const fullAddress = geoData.display_name || "Adresse inconnue";
+
+            locationName.textContent = mainName;
+            locationAddress.textContent = fullAddress;
+        }
+
+        // Fetch AI Description using Gemini API (`gemini-3-flash-preview`)
+        async function fetchGeminiStory(geoData, lat, lon) {
+            const apiKey = ""; // Canvas handles API key runtime insertion
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+            const addr = geoData.address || {};
+            const locationContext = `
+                Coordonnées GPS: Latitude ${lat}, Longitude ${lon}.
+                Adresse complète: ${geoData.display_name || 'Non spécifiée'}
+                Quartier/Rue: ${addr.road || addr.suburb || ''}
+                Ville/Commune: ${addr.city || addr.town || addr.village || ''}
+                Région/Département: ${addr.state || addr.county || ''}
+                Pays: ${addr.country || ''}
+                Points d'intérêt proches ou type de zone: ${addr.tourism || addr.historic || addr.amenity || addr.leisure || 'Non renseigné'}
+            `;
+
+            const systemPrompt = `Tu es un guide touristique passionné, chaleureux, érudit et captivant. 
+Ton objectif est de créer une courte présentation audio (environ 3 à 4 phrases bien structurées, d'une durée de lecture orale d'environ 30 à 45 secondes) destinée à être lue à voix haute à l'utilisateur qui se trouve exactement à cet endroit.
+Parle à la deuxième personne ("Vous êtes actuellement..."). Raconte ce qui fait le charme ou la spécificité de cet endroit ou de cette région (histoire, culture, atmosphère, anecdotes ou paysage environnant). 
+Garde un ton engageant, fluide et agréable à l'oreille. Réponds uniquement en français sans balises Markdown particulières.`;
+
+            const userPrompt = `Voici mes données de localisation actuelles :\n${locationContext}\n\nFais-moi un récit vivant et captivant de l'endroit où je me trouve pour mon guide audio !`;
+
+            const payload = {
+                contents: [
+                    { parts: [{ text: userPrompt }] }
+                ],
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }]
+                }
+            };
+
+            // Implement simple exponential backoff fetch for robustness
+            let attempts = 0;
+            let response;
+            while (attempts < 3) {
+                try {
+                    response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (response.ok) break;
+                } catch (e) {
+                    console.warn(`Tentative Gemini ${attempts + 1} échouée.`);
+                }
+                attempts++;
+                await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempts)));
+            }
+
+            if (!response || !response.ok) {
+                throw new Error("L'API Gemini n'a pas pu générer le résumé touristique.");
+            }
+
+            const data = await response.json();
+            const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+            if (!textResponse) {
+                throw new Error("Réponse vide de Gemini.");
+            }
+
+            return textResponse.trim();
+        }
+
+        // Web Speech API Text-To-Speech Playback
+        function speakText(text) {
+            if (!('speechSynthesis' in window)) {
+                showToast("Votre navigateur ne supporte pas la synthèse vocale.", "error");
+                return;
+            }
+
+            // Cancel any current speech
+            synth.cancel();
+
+            speechUtterance = new SpeechSynthesisUtterance(text);
+            speechUtterance.lang = 'fr-FR';
+
+            // Apply Voice Selection if available
+            if (selectedVoice) {
+                speechUtterance.voice = selectedVoice;
+            }
+
+            // Apply Speed rate
+            const rateVal = parseFloat(speedRateInput.value) || 1.0;
+            speechUtterance.rate = rateVal;
+
+            // Events listeners for utterance
+            speechUtterance.onstart = () => {
+                setPlaybackUIActive(true);
+                audioPlaybackStatus.textContent = "Lecture en cours...";
+            };
+
+            speechUtterance.onend = () => {
+                setPlaybackUIActive(false);
+                audioPlaybackStatus.textContent = "Lecture terminée.";
+                updateStatus("Lecture terminée.", "emerald");
+            };
+
+            speechUtterance.onerror = (event) => {
+                console.error("SpeechSynthesis error:", event);
+                setPlaybackUIActive(false);
+                audioPlaybackStatus.textContent = "Erreur de lecture audio.";
+            };
+
+            speechUtterance.onpause = () => {
+                audioPlaybackStatus.textContent = "En pause.";
+            };
+
+            speechUtterance.onresume = () => {
+                audioPlaybackStatus.textContent = "Lecture en cours...";
+            };
+
+            // Start Speaking
+            synth.speak(speechUtterance);
+        }
+
+        // Toggle Pause & Resume
+        function togglePauseResume() {
+            if (!synth.speaking) return;
+
+            if (synth.paused) {
+                synth.resume();
+                isPaused = false;
+                pauseIcon.className = "fa-solid fa-pause";
+                equalizerWaves.classList.remove('opacity-40');
+                audioPlaybackStatus.textContent = "Lecture en cours...";
+            } else {
+                synth.pause();
+                isPaused = true;
+                pauseIcon.className = "fa-solid fa-play";
+                equalizerWaves.classList.add('opacity-40');
+                audioPlaybackStatus.textContent = "En pause.";
+            }
+        }
+
+        // Stop Audio Playback
+        function stopAudio() {
+            if (synth.speaking || synth.paused) {
+                synth.cancel();
+            }
+            setPlaybackUIActive(false);
+            audioPlaybackStatus.textContent = "Arrêté.";
+        }
+
+        // UI Helpers
+        function setUIStateLoading(isLoading) {
+            if (isLoading) {
+                btnIcon.classList.add('hidden');
+                btnLabel.classList.add('hidden');
+                btnSpinner.classList.remove('hidden');
+                listenBtn.disabled = true;
+                listenBtn.classList.add('cursor-wait', 'opacity-80');
+                btnGlow.classList.add('pulse-active', 'bg-indigo-500/40');
+            } else {
+                btnSpinner.classList.add('hidden');
+                btnIcon.classList.remove('hidden');
+                btnLabel.classList.remove('hidden');
+                listenBtn.disabled = false;
+                listenBtn.classList.remove('cursor-wait', 'opacity-80');
+                btnGlow.classList.remove('pulse-active', 'bg-indigo-500/40');
+            }
+        }
+
+        function setPlaybackUIActive(isActive) {
+            if (isActive) {
+                audioControlsCard.classList.remove('opacity-60', 'pointer-events-none');
+                pauseBtn.disabled = false;
+                stopBtn.disabled = false;
+                pauseIcon.className = "fa-solid fa-pause";
+                equalizerWaves.classList.remove('opacity-40');
+            } else {
+                pauseBtn.disabled = true;
+                stopBtn.disabled = true;
+                pauseIcon.className = "fa-solid fa-pause";
+                equalizerWaves.classList.add('opacity-40');
+                audioControlsCard.classList.add('opacity-60', 'pointer-events-none');
+            }
+        }
+
+        function updateStatus(message, color = "indigo") {
+            statusText.textContent = message;
+            
+            const colorMap = {
+                slate: 'bg-slate-500',
+                indigo: 'bg-indigo-500 animate-pulse',
+                yellow: 'bg-amber-400 animate-pulse',
+                emerald: 'bg-emerald-500',
+                rose: 'bg-rose-500'
+            };
+
+            statusDot.className = `w-2.5 h-2.5 rounded-full ${colorMap[color] || 'bg-indigo-500'}`;
+        }
+
+        function copyTextToClipboard() {
+            if (!generatedStoryText) return;
+            
+            // Fallback execCommand for iframe compatibility
+            const tempTextArea = document.createElement("textarea");
+            tempTextArea.value = generatedStoryText;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            try {
+                document.execCommand('copy');
+                showToast("Texte copié dans le presse-papier !");
+            } catch (err) {
+                showToast("Impossible de copier le texte.", "error");
+            }
+            document.body.removeChild(tempTextArea);
+        }
+
+        function showToast(message, type = "info") {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toast-message');
+            const toastIcon = document.getElementById('toast-icon');
+
+            toastMessage.textContent = message;
+
+            if (type === "error") {
+                toastIcon.className = "fa-solid fa-circle-exclamation text-rose-400 text-lg";
+            } else {
+                toastIcon.className = "fa-solid fa-circle-check text-emerald-400 text-lg";
+            }
+
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3500);
+        }
+    </script>
+</body>
+</html>
