@@ -1,639 +1,1096 @@
 <!DOCTYPE html>
-<html lang="fr" class="h-full bg-slate-900 text-slate-100">
+<html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Guide Audio GPS - Découverte Locale</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Google Fonts Inter -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- FontAwesome Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>🌍 Guide Audio Touristique</title>
+    
+    <!-- Configuration pour l'écran d'accueil du smartphone (PWA & iOS) -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Guide Audio">
+    <link rel="apple-touch-icon" href="https://images.emojiterra.com/google/android-11/512px/1f30f.png">
+    
+    <!-- Manifest inline avec l'icône du globe terrestre -->
+    <link rel="manifest" href='data:application/manifest+json,{
+      "name": "Guide Audio Touristique",
+      "short_name": "Guide Audio",
+      "start_url": ".",
+      "display": "standalone",
+      "background_color": "#0b132b",
+      "theme_color": "#0b132b",
+      "icons": [
+        {
+          "src": "https://images.emojiterra.com/google/android-11/512px/1f30f.png",
+          "sizes": "512x512",
+          "type": "image/png"
+        }
+      ]
+    }'>
+
+    <!-- Leaflet CSS & JS pour la cartographie -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
     <style>
-        body { font-family: 'Inter', sans-serif; }
+        * {
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            background-color: #0b132b;
+            color: #f0f2f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            min-height: 100vh;
+            margin: 0;
+            padding: 12px;
+        }
+        .card {
+            background: #1c2541;
+            padding: 16px;
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+            width: 100%;
+            max-width: 480px;
+            text-align: center;
+            border: 1px solid #3a506b;
+            margin-top: 10px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            font-size: 1.35rem;
+            margin: 8px 0 14px 0;
+            color: #ffffff;
+        }
+        button {
+            background-color: #ffd166;
+            color: #0b132b;
+            border: none;
+            padding: 14px 20px;
+            font-size: 1rem;
+            font-weight: 700;
+            border-radius: 28px;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 10px;
+            box-shadow: 0 4px 10px rgba(255, 209, 102, 0.2);
+            touch-action: manipulation;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        button:disabled {
+            background-color: #3a506b;
+            color: #8d99ae;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
         
-        /* Custom Pulse Wave Animation for Listening state */
-        @keyframes pulse-ring {
-            0% { transform: scale(0.95); opacity: 0.8; }
-            50% { transform: scale(1.1); opacity: 0.4; }
-            100% { transform: scale(0.95); opacity: 0.8; }
+        /* Conteneur de la Carte */
+        #map-container {
+            width: 100%;
+            margin: 12px 0;
+            display: none;
         }
-        .pulse-active {
-            animation: pulse-ring 2s infinite ease-in-out;
-        }
-
-        /* Equalizer Bars Animation */
-        .eq-bar {
-            width: 4px;
-            background-color: #3b82f6;
-            animation: eq 1s ease-in-out infinite alternate;
-        }
-        .eq-bar:nth-child(1) { height: 16px; animation-delay: 0.1s; }
-        .eq-bar:nth-child(2) { height: 28px; animation-delay: 0.3s; }
-        .eq-bar:nth-child(3) { height: 20px; animation-delay: 0.2s; }
-        .eq-bar:nth-child(4) { height: 32px; animation-delay: 0.4s; }
-        .eq-bar:nth-child(5) { height: 12px; animation-delay: 0.15s; }
-
-        @keyframes eq {
-            0% { transform: scaleY(0.3); }
-            100% { transform: scaleY(1.1); }
+        #map {
+            width: 100%;
+            height: 280px;
+            border-radius: 12px;
+            border: 1px solid #3a506b;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
 
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar {
-            width: 6px;
+        .divider {
+            display: flex;
+            align-items: center;
+            text-align: center;
+            margin: 12px 0;
+            color: #8d99ae;
+            font-size: 0.8rem;
         }
-        ::-webkit-scrollbar-track {
-            background: rgba(15, 23, 42, 0.6);
+        .divider::before, .divider::after {
+            content: '';
+            flex: 1;
+            border-bottom: 1px solid #3a506b;
         }
-        ::-webkit-scrollbar-thumb {
-            background: rgba(51, 65, 85, 0.8);
+        .divider span {
+            padding: 0 8px;
+        }
+        .search-box {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .search-box input {
+            flex: 1;
+            padding: 12px 14px;
+            border-radius: 24px;
+            border: 1px solid #3a506b;
+            background-color: #0b132b;
+            color: #ffffff;
+            font-size: 0.95rem;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        .search-box input:focus {
+            border-color: #ffd166;
+        }
+        .search-box button {
+            width: 50px;
+            flex-shrink: 0;
+            margin-bottom: 0;
+            padding: 0;
+            border-radius: 24px;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .controls {
+            display: flex;
+            gap: 8px;
+            margin-top: 4px;
+        }
+        .secondary-btn {
+            background-color: #28385e;
+            color: #f0f2f5;
+            padding: 12px;
+            font-size: 0.9rem;
+            border: 1px solid #3a506b;
+        }
+        .more-btn {
+            background-color: #28385e;
+            color: #ffd166;
+            border: 1px solid #ffd166;
+            margin-top: 10px;
+            margin-bottom: 10px;
+            display: none;
+        }
+        .config-control {
+            margin: 8px 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.9rem;
+            color: #b0c4de;
+            background: #0b132b;
+            padding: 8px 12px;
+            border-radius: 12px;
+            border: 1px solid #3a506b;
+        }
+        .config-control select {
+            padding: 6px 10px;
+            border-radius: 8px;
+            border: 1px solid #3a506b;
+            background: #1c2541;
+            color: #ffffff;
+            font-size: 0.9rem;
+            outline: none;
+        }
+        #status {
+            margin: 10px 0;
+            font-size: 0.85rem;
+            color: #ffd166;
+            min-height: 20px;
+            padding: 0 4px;
+            word-break: break-word;
+        }
+        #progress-container {
+            margin: 12px 0 4px 0;
+            display: none;
+        }
+        .progress-bar-bg {
+            width: 100%;
+            height: 6px;
+            background-color: #0b132b;
             border-radius: 3px;
+            overflow: hidden;
+            border: 1px solid #3a506b;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            width: 0%;
+            background-color: #ffd166;
+            transition: width 0.2s linear;
+        }
+        .time-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: #8d99ae;
+            margin-top: 4px;
+        }
+        
+        #carousel-container {
+            margin: 12px 0;
+            display: none;
+            position: relative;
+        }
+        .carousel-wrapper {
+            position: relative;
+            width: 100%;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+            border: 1px solid #3a506b;
+            background: #0b132b;
+        }
+        .carousel-track-container {
+            width: 100%;
+            max-height: 200px;
+            overflow: hidden;
+            display: flex;
+        }
+        .carousel-track {
+            display: flex;
+            width: 100%;
+            transition: transform 0.4s ease-in-out;
+        }
+        .carousel-slide {
+            min-width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #0b132b;
+        }
+        .carousel-slide img {
+            width: 100%;
+            max-height: 200px;
+            object-fit: cover;
+        }
+        .carousel-indicators {
+            display: flex;
+            justify-content: center;
+            gap: 6px;
+            margin-top: 6px;
+        }
+        .indicator {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background-color: #3a506b;
+            cursor: pointer;
+        }
+        .indicator.active {
+            background-color: #ffd166;
+        }
+
+        #article-title {
+            font-weight: bold;
+            font-size: 1.05rem;
+            margin: 8px 0 4px 0;
+            color: #ffd166;
+            word-break: break-word;
+        }
+        #sources-badge {
+            font-size: 0.75rem;
+            color: #8d99ae;
+            margin-bottom: 8px;
+        }
+        #output {
+            text-align: left;
+            background: #0b132b;
+            padding: 12px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            line-height: 1.4;
+            max-height: 160px;
+            overflow-y: auto;
+            margin-top: 8px;
+            display: none;
+            color: #e2e8f0;
+            border: 1px solid #3a506b;
+            -webkit-overflow-scrolling: touch;
+        }
+        #wikipedia-link-container {
+            margin-top: 14px;
+            display: none;
+            font-size: 0.85rem;
+        }
+        #wikipedia-link-container a {
+            color: #ffd166;
+            text-decoration: none;
+            font-weight: 500;
+            word-break: break-word;
+        }
+        #wikipedia-link-container a:hover {
+            text-decoration: underline;
+        }
+
+        .app-version {
+            text-align: center;
+            font-size: 0.75rem;
+            color: #8d99ae;
+            margin-top: 16px;
+            margin-bottom: 4px;
+            letter-spacing: 0.5px;
         }
     </style>
 </head>
-<body class="h-full flex flex-col justify-between bg-gradient-to-b from-slate-950 via-slate-900 to-indigo-950 min-h-screen text-slate-100 antialiased selection:bg-indigo-500 selection:text-white">
+<body>
 
-    <!-- Header Section -->
-    <header class="w-full max-w-2xl mx-auto px-4 pt-6 pb-2 text-center">
-        <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold uppercase tracking-wider mb-2">
-            <i class="fa-solid me-1 fa-compass animate-spin-slow"></i> Explorateur Audio IA
-        </div>
-        <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent">
-            Où suis-je ?
-        </h1>
-        <p class="text-sm text-slate-400 mt-1 max-w-md mx-auto">
-            Découvrez l'histoire, la culture et les curiosités de votre position actuelle grâce à votre guide audio intelligent.
-        </p>
-    </header>
+<div class="card">
+    <h1>🌍 Guide Audio Touristique</h1>
+    
+    <button id="listen-btn" onclick="startGuideGPS()">📍 Écouter le lieu actuel (GPS)</button>
 
-    <!-- Main Content Area -->
-    <main class="w-full max-w-2xl mx-auto px-4 flex-1 flex flex-col items-center justify-center gap-6 my-4">
-        
-        <!-- Action Button & Interactive Center -->
-        <div class="relative flex flex-col items-center justify-center my-2">
-            <!-- Glow background effect -->
-            <div id="btn-glow" class="absolute w-44 h-44 rounded-full bg-indigo-600/20 blur-xl transition-all duration-500"></div>
+    <!-- Zone de carte Leaflet -->
+    <div id="map-container">
+        <div id="map"></div>
+    </div>
+    
+    <div class="divider"><span>OU SAISIR UN LIEU</span></div>
 
-            <!-- Big Listen Button -->
-            <button id="listen-btn" onclick="startAudioGuideSequence()" class="relative z-10 w-36 h-36 rounded-full bg-gradient-to-tr from-indigo-600 via-indigo-500 to-blue-500 hover:from-indigo-500 hover:to-blue-400 active:scale-95 shadow-xl shadow-indigo-900/40 border-4 border-slate-900/50 flex flex-col items-center justify-center transition-all duration-300 group cursor-pointer focus:outline-none focus:ring-4 focus:ring-indigo-500/50">
-                <div id="btn-icon-container" class="flex flex-col items-center">
-                    <i id="btn-icon" class="fa-solid fa-volume-high text-4xl text-white group-hover:scale-110 transition-transform duration-300"></i>
-                    <span id="btn-label" class="mt-2 text-sm font-bold uppercase tracking-wider text-white">Écouter</span>
-                </div>
-                <!-- Spinner loader (hidden by default) -->
-                <div id="btn-spinner" class="hidden">
-                    <i class="fa-solid fa-circle-notch fa-spin text-4xl text-white"></i>
-                </div>
-            </button>
-
-            <!-- Status Indicator Badge below button -->
-            <div id="status-badge" class="mt-4 px-4 py-1.5 rounded-full bg-slate-800/80 border border-slate-700/60 text-xs font-medium text-slate-300 flex items-center gap-2 shadow-sm backdrop-blur-md">
-                <span id="status-dot" class="w-2 h-2 rounded-full bg-slate-500"></span>
-                <span id="status-text">Prêt. Appuyez sur Écouter pour démarrer.</span>
-            </div>
-        </div>
-
-        <!-- Audio Playback Controls Bar (Appears during/after playback) -->
-        <div id="audio-controls-card" class="w-full bg-slate-800/60 backdrop-blur-md rounded-2xl p-4 border border-slate-700/50 shadow-lg flex flex-col gap-3 transition-all duration-300 opacity-60 pointer-events-none">
-            
-            <div class="flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                    <!-- Dynamic Sound Waves Icon -->
-                    <div id="equalizer-waves" class="flex items-center gap-1 h-8 opacity-40">
-                        <div class="eq-bar rounded-full"></div>
-                        <div class="eq-bar rounded-full"></div>
-                        <div class="eq-bar rounded-full"></div>
-                        <div class="eq-bar rounded-full"></div>
-                        <div class="eq-bar rounded-full"></div>
-                    </div>
-                    <div>
-                        <h2 class="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Lecteur Vocal</h2>
-                        <p id="audio-playback-status" class="text-sm font-medium text-slate-200">En attente...</p>
-                    </div>
-                </div>
-
-                <!-- Action Buttons: Pause / Resume / Stop -->
-                <div class="flex items-center gap-2">
-                    <button id="pause-btn" onclick="togglePauseResume()" disabled class="p-2.5 rounded-xl bg-slate-700/80 hover:bg-slate-700 text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus:outline-none" title="Pause / Reprendre">
-                        <i id="pause-icon" class="fa-solid fa-pause"></i>
-                    </button>
-                    <button id="stop-btn" onclick="stopAudio()" disabled class="p-2.5 rounded-xl bg-rose-900/30 hover:bg-rose-800/50 text-rose-300 border border-rose-700/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus:outline-none" title="Arrêter">
-                        <i class="fa-solid fa-square"></i>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Voice and Speed settings (collapsible / minimalist) -->
-            <div class="pt-2 border-t border-slate-700/40 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                <div>
-                    <label for="voice-select" class="block text-slate-400 font-medium mb-1">Voix française</label>
-                    <select id="voice-select" onchange="updateVoiceSettings()" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500">
-                        <option value="">Chargement des voix...</option>
-                    </select>
-                </div>
-                <div>
-                    <div class="flex justify-between text-slate-400 font-medium mb-1">
-                        <label for="speed-rate">Vitesse de lecture</label>
-                        <span id="speed-value" class="text-indigo-400 font-bold">1x</span>
-                    </div>
-                    <input type="range" id="speed-rate" min="0.7" max="1.4" step="0.1" value="1" oninput="updateSpeedValue(this.value)" class="w-full accent-indigo-500 bg-slate-900 rounded-lg cursor-pointer">
-                </div>
-            </div>
-        </div>
-
-        <!-- Location & Generated Description Card -->
-        <div class="w-full bg-slate-800/40 backdrop-blur-md rounded-2xl p-5 border border-slate-700/50 shadow-xl flex flex-col gap-4">
-            
-            <!-- Location Details Header -->
-            <div class="flex items-start justify-between border-b border-slate-700/50 pb-3">
-                <div class="flex items-center gap-3">
-                    <div class="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                        <i class="fa-solid fa-location-dot text-lg"></i>
-                    </div>
-                    <div>
-                        <h3 id="location-name" class="font-bold text-slate-100 text-base">Position non détectée</h3>
-                        <p id="location-address" class="text-xs text-slate-400 mt-0.5">Cliquez sur « Écouter » pour obtenir votre adresse.</p>
-                    </div>
-                </div>
-                <div id="coords-badge" class="hidden sm:flex flex-col items-end text-[10px] text-slate-400 font-mono bg-slate-900/60 px-2.5 py-1.5 rounded-lg border border-slate-700/40">
-                    <span id="lat-val">Lat: --</span>
-                    <span id="lon-val">Lon: --</span>
-                </div>
-            </div>
-
-            <!-- Speech Output Text Area -->
-            <div class="relative">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                        <i class="fa-solid fa-sparkles text-amber-400"></i> Récit Touristique Gemini
-                    </span>
-                    <button id="copy-btn" onclick="copyTextToClipboard()" title="Copier le texte" class="hidden text-xs text-slate-400 hover:text-indigo-300 transition-colors">
-                        <i class="fa-regular fa-copy"></i> Copier
-                    </button>
-                </div>
-                
-                <div id="description-box" class="min-h-[120px] max-h-[220px] overflow-y-auto pr-2 text-sm leading-relaxed text-slate-300 font-normal bg-slate-900/50 rounded-xl p-4 border border-slate-800/80">
-                    <p class="text-slate-500 italic">Le texte généré par l'intelligence artificielle apparaîtra ici et sera lu automatiquement...</p>
-                </div>
-            </div>
-        </div>
-
-    </main>
-
-    <!-- Footer -->
-    <footer class="w-full max-w-2xl mx-auto px-4 py-4 text-center text-xs text-slate-500">
-        Développé avec Web Geolocation API, OpenStreetMap Nominatim, Gemini API & Web Speech API.
-    </footer>
-
-    <!-- Notification Toast -->
-    <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 max-w-sm bg-slate-800 border border-slate-700 text-slate-200 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3">
-        <i id="toast-icon" class="fa-solid fa-circle-info text-indigo-400 text-lg"></i>
-        <span id="toast-message" class="text-xs">Message</span>
+    <div class="search-box">
+        <input type="text" id="manual-place-input" placeholder="Ex: Big Ben, Tour Eiffel..." onkeypress="handleKeyPress(event)">
+        <button id="search-btn" onclick="startGuideManual()">🔍</button>
     </div>
 
-    <!-- JavaScript Application Logic -->
-    <script>
-        // Global Application State Variables
-        let currentLatitude = null;
-        let currentLongitude = null;
-        let locationDetails = null;
-        let generatedStoryText = "";
-        
-        // Speech Synthesis setup
-        const synth = window.speechSynthesis;
-        let availableVoices = [];
-        let selectedVoice = null;
-        let speechUtterance = null;
-        let isPaused = false;
+    <div class="config-control">
+        <label for="duration-select">Durée de l'explication :</label>
+        <select id="duration-select">
+            <option value="1">1 minute</option>
+            <option value="2" selected>2 minutes</option>
+            <option value="4">4 minutes</option>
+            <option value="6">6 minutes</option>
+        </select>
+    </div>
 
-        // UI Element References
-        const listenBtn = document.getElementById('listen-btn');
-        const btnIcon = document.getElementById('btn-icon');
-        const btnLabel = document.getElementById('btn-label');
-        const btnSpinner = document.getElementById('btn-spinner');
-        const btnGlow = document.getElementById('btn-glow');
-        
-        const statusBadge = document.getElementById('status-badge');
-        const statusDot = document.getElementById('status-dot');
-        const statusText = document.getElementById('status-text');
+    <div class="config-control">
+        <label for="speed-select">Vitesse de lecture :</label>
+        <select id="speed-select" onchange="changeSpeed()">
+            <option value="0.75">0.75x (Lent)</option>
+            <option value="1.0">1.0x (Normal)</option>
+            <option value="1.1" selected>1.1x (Idéal)</option>
+            <option value="1.25">1.25x (Rapide)</option>
+            <option value="1.5">1.5x (Très rapide)</option>
+            <option value="2.0">2.0x (Max)</option>
+        </select>
+    </div>
 
-        const audioControlsCard = document.getElementById('audio-controls-card');
-        const audioPlaybackStatus = document.getElementById('audio-playback-status');
-        const pauseBtn = document.getElementById('pause-btn');
-        const pauseIcon = document.getElementById('pause-icon');
-        const stopBtn = document.getElementById('stop-btn');
-        const equalizerWaves = document.getElementById('equalizer-waves');
+    <div class="controls">
+        <button id="pause-btn" class="secondary-btn" onclick="togglePause()" disabled>Pause</button>
+        <button id="stop-btn" class="secondary-btn" onclick="stopAudio()" disabled>Arrêter</button>
+    </div>
 
-        const voiceSelect = document.getElementById('voice-select');
-        const speedRateInput = document.getElementById('speed-rate');
-        const speedValueDisplay = document.getElementById('speed-value');
+    <div id="progress-container">
+        <div class="progress-bar-bg">
+            <div id="progress-fill" class="progress-bar-fill"></div>
+        </div>
+        <div class="time-info">
+            <span id="current-time">0:00</span>
+            <span id="total-time">0:00</span>
+        </div>
+    </div>
 
-        const locationName = document.getElementById('location-name');
-        const locationAddress = document.getElementById('location-address');
-        const latVal = document.getElementById('lat-val');
-        const lonVal = document.getElementById('lon-val');
-        const coordsBadge = document.getElementById('coords-badge');
-        const descriptionBox = document.getElementById('description-box');
-        const copyBtn = document.getElementById('copy-btn');
+    <button id="more-btn" class="more-btn" onclick="loadMoreDetails()">📖 En savoir plus (+ de chapitres)</button>
 
-        // Initialize Speech Voices when window loads
-        window.onload = () => {
-            initVoices();
-            if (speechSynthesis.onvoiceschanged !== undefined) {
-                speechSynthesis.onvoiceschanged = initVoices;
-            }
-        };
+    <div id="status">Choisissez une méthode pour démarrer.</div>
+    
+    <div id="carousel-container">
+        <div class="carousel-wrapper">
+            <div class="carousel-track-container">
+                <div id="carousel-track" class="carousel-track"></div>
+            </div>
+        </div>
+        <div id="carousel-indicators" class="carousel-indicators"></div>
+    </div>
+    
+    <div id="article-title"></div>
+    <div id="sources-badge"></div>
 
-        // Load available French voices for Web Speech API
-        function initVoices() {
-            availableVoices = synth.getVoices().filter(v => v.lang.startsWith('fr'));
-            
-            // Fallback if no French voice, load all
-            const voicesToDisplay = availableVoices.length > 0 ? availableVoices : synth.getVoices();
+    <div id="output"></div>
 
-            voiceSelect.innerHTML = '';
-            if (voicesToDisplay.length === 0) {
-                const opt = document.createElement('option');
-                opt.textContent = "Voix par défaut du système";
-                voiceSelect.appendChild(opt);
+    <div id="wikipedia-link-container">
+        <a id="wikipedia-link" href="#" target="_blank">📖 Lire l'article complet sur Wikipédia</a>
+    </div>
+
+    <div class="app-version">2026.11.8.3</div>
+</div>
+
+<script>
+    const synth = window.speechSynthesis;
+    let currentUtterance = null;
+    let combinedContent = [];
+    let currentChunkIndex = 0;
+    let currentTitle = "";
+    let availableVoices = [];
+
+    let speechStartTime = 0;
+    let speechDurationMs = 0;
+    let progressInterval = null;
+    let isPausedState = false;
+    let pauseElapsedMs = 0;
+    let currentSpokenText = "";
+
+    let carouselImages = [];
+    let currentSlideIndex = 0;
+
+    // Variables pour Leaflet
+    let map = null;
+    let userMarker = null;
+    let poiLayerGroup = null;
+    let radiusCircle = null;
+
+    function loadVoices() {
+        availableVoices = synth.getVoices();
+    }
+    loadVoices();
+    if (speechSynthesis.onvoiceschanged !== undefined) {
+        speechSynthesis.onvoiceschanged = loadVoices;
+    }
+
+    function getBestFrenchVoice() {
+        if (availableVoices.length === 0) {
+            availableVoices = synth.getVoices();
+        }
+        const frVoices = availableVoices.filter(v => v.lang.startsWith('fr'));
+        if (frVoices.length === 0) return null;
+
+        const premiumVoice = frVoices.find(v => 
+            v.name.includes('Google') || 
+            v.name.includes('Natural') || 
+            v.name.includes('Premium') || 
+            v.name.includes('Enhanced') ||
+            v.name.includes('Améliorée')
+        );
+        return premiumVoice || frVoices[0];
+    }
+
+    function setStatus(text) {
+        document.getElementById('status').innerText = text;
+    }
+
+    function formatTime(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    }
+
+    function resetUI() {
+        stopAudio();
+        document.getElementById('output').style.display = 'none';
+        document.getElementById('article-title').innerText = '';
+        document.getElementById('sources-badge').innerText = '';
+        document.getElementById('carousel-container').style.display = 'none';
+        document.getElementById('carousel-track').innerHTML = '';
+        document.getElementById('carousel-indicators').innerHTML = '';
+        document.getElementById('wikipedia-link-container').style.display = 'none';
+        document.getElementById('more-btn').style.display = 'none';
+        document.getElementById('progress-container').style.display = 'none';
+        combinedContent = [];
+        currentChunkIndex = 0;
+        carouselImages = [];
+        currentSlideIndex = 0;
+        currentSpokenText = "";
+    }
+
+    function handleKeyPress(event) {
+        if (event.key === 'Enter') {
+            startGuideManual();
+            document.getElementById('manual-place-input').blur();
+        }
+    }
+
+    function initOrUpdateMap(lat, lon) {
+        const mapContainer = document.getElementById('map-container');
+        mapContainer.style.display = 'block';
+
+        const radiusMeters = 300; // Rayon ajusté à 300 mètres
+
+        if (!map) {
+            map = L.map('map').setView([lat, lon], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap'
+            }).addTo(map);
+
+            poiLayerGroup = L.layerGroup().addTo(map);
+        } else {
+            map.setView([lat, lon], 15);
+            poiLayerGroup.clearLayers();
+            if (userMarker) map.removeLayer(userMarker);
+            if (radiusCircle) map.removeLayer(radiusCircle);
+        }
+
+        // Marqueur bleu pour l'utilisateur
+        userMarker = L.circleMarker([lat, lon], {
+            radius: 8,
+            fillColor: "#007aff",
+            color: "#ffffff",
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.9
+        }).addTo(map).bindPopup("<b>Votre position</b>");
+
+        // Cercle délimitant le rayon de 300 m
+        radiusCircle = L.circle([lat, lon], {
+            color: '#ffd166',
+            fillColor: '#ffd166',
+            fillOpacity: 0.1,
+            radius: radiusMeters
+        }).addTo(map);
+
+        setTimeout(() => { map.invalidateSize(); }, 200);
+
+        // Recherche des points d'intérêt dans le rayon de 300m
+        fetchPOIsAround(lat, lon, radiusMeters);
+    }
+
+    async function fetchPOIsAround(lat, lon, radius) {
+        try {
+            // Requête Overpass API pour chercher les objets ayant un tag wikipedia
+            const query = `
+                [out:json][timeout:25];
+                (
+                  node["wikipedia"](around:${radius},${lat},${lon});
+                  way["wikipedia"](around:${radius},${lat},${lon});
+                  relation["wikipedia"](around:${radius},${lat},${lon});
+                );
+                out center;
+            `;
+            const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+            const response = await fetch(overpassUrl);
+            const data = await response.json();
+
+            if (!data.elements || data.elements.length === 0) {
                 return;
             }
 
-            voicesToDisplay.forEach((voice, index) => {
-                const option = document.createElement('option');
-                option.textContent = `${voice.name} (${voice.lang})`;
-                option.value = index;
-                if (voice.default || voice.lang === 'fr-FR' || voice.lang === 'fr_FR') {
-                    option.selected = true;
-                    selectedVoice = voice;
-                }
-                voiceSelect.appendChild(option);
-            });
-
-            if (!selectedVoice && voicesToDisplay.length > 0) {
-                selectedVoice = voicesToDisplay[0];
-            }
-        }
-
-        function updateVoiceSettings() {
-            const index = voiceSelect.value;
-            const voicesToDisplay = availableVoices.length > 0 ? availableVoices : synth.getVoices();
-            if (voicesToDisplay[index]) {
-                selectedVoice = voicesToDisplay[index];
-                showToast("Voix mise à jour : " + selectedVoice.name);
-            }
-        }
-
-        function updateSpeedValue(val) {
-            speedValueDisplay.textContent = `${val}x`;
-        }
-
-        // Master Flow Triggered on "Écouter" Button Click
-        async function startAudioGuideSequence() {
-            // Stop any ongoing speech
-            stopAudio();
-
-            // Set Loading UI State
-            setUIStateLoading(true);
-            updateStatus("Acquisition de votre position GPS...", "yellow");
-
-            try {
-                // Step 1: Obtain User's GPS Location
-                const position = await getGPSCoordinates();
-                currentLatitude = position.coords.latitude;
-                currentLongitude = position.coords.longitude;
-
-                latVal.textContent = `Lat: ${currentLatitude.toFixed(5)}`;
-                lonVal.textContent = `Lon: ${currentLongitude.toFixed(5)}`;
-                coordsBadge.classList.remove('hidden');
-
-                // Step 2: Reverse Geocode via OpenStreetMap Nominatim
-                updateStatus("Recherche des détails du lieu...", "indigo");
-                locationDetails = await fetchReverseGeocoding(currentLatitude, currentLongitude);
-
-                // Update UI location header
-                updateLocationHeader(locationDetails);
-
-                // Step 3: Call Gemini API to generate story
-                updateStatus("Rédaction du récit audio par l'IA...", "indigo");
-                generatedStoryText = await fetchGeminiStory(locationDetails, currentLatitude, currentLongitude);
-
-                // Display generated text
-                descriptionBox.innerHTML = `<p class="text-slate-100 font-medium">${generatedStoryText}</p>`;
-                copyBtn.classList.remove('hidden');
-
-                // Step 4: Play Speech Synthesis Audio
-                updateStatus("Lecture audio en cours...", "emerald");
-                speakText(generatedStoryText);
-
-            } catch (error) {
-                console.error("Erreur dans la séquence:", error);
-                showToast(error.message || "Une erreur s'est produite.", "error");
-                updateStatus("Erreur : " + (error.message || "Échec"), "rose");
+            data.elements.forEach(el => {
+                const itemLat = el.lat || (el.center && el.center.lat);
+                const itemLon = el.lon || (el.center && el.center.lon);
                 
-                // Fallback attempt: read address if Gemini fails
-                if (locationDetails && locationDetails.display_name) {
-                    const fallbackText = `Vous vous trouvez à l'adresse suivante : ${locationDetails.display_name}. Impossible de charger le guide audio complet.`;
-                    descriptionBox.innerHTML = `<p class="text-rose-300 font-medium">${fallbackText}</p>`;
-                    speakText(fallbackText);
-                } else {
-                    descriptionBox.innerHTML = `<p class="text-rose-400">Impossible de récupérer les informations de localisation ou de générer l'audio. Veuillez vérifier vos autorisations GPS.</p>`;
+                if (itemLat && itemLon && el.tags && el.tags.wikipedia) {
+                    const wikiTag = el.tags.wikipedia; // Ex: "fr:Tour Eiffel" ou "Tour Eiffel"
+                    let wikiTitle = wikiTag.includes(':') ? wikiTag.split(':')[1] : wikiTag;
+                    const name = el.tags.name || wikiTitle;
+
+                    // Créer un point rouge pour chaque élément wikipédia
+                    const redMarker = L.circleMarker([itemLat, itemLon], {
+                        radius: 7,
+                        fillColor: "#ff4d4d",
+                        color: "#ffffff",
+                        weight: 2,
+                        opacity: 1,
+                        fillOpacity: 0.9
+                    });
+
+                    redMarker.bindPopup(`<b>${name}</b><br><small>Cliquez pour écouter l'explication</small>`);
+                    
+                    redMarker.on('click', () => {
+                        resetUI();
+                        setStatus(`Chargement de : "${wikiTitle}"...`);
+                        fetchFullArticleByTitle(wikiTitle);
+                    });
+
+                    poiLayerGroup.addLayer(redMarker);
                 }
-            } finally {
-                setUIStateLoading(false);
-            }
+            });
+        } catch (err) {
+            console.error("Erreur chargement Overpass POIs:", err);
+        }
+    }
+
+    function startGuideGPS() {
+        resetUI();
+        if (!navigator.geolocation) {
+            setStatus("La géolocalisation n'est pas supportée par votre navigateur.");
+            return;
         }
 
-        // Get GPS Position Promise Wrapper
-        function getGPSCoordinates() {
-            return new Promise((resolve, reject) => {
-                if (!navigator.geolocation) {
-                    reject(new Error("La géolocalisation n'est pas supportée par votre navigateur."));
+        setStatus("Recherche de votre position GPS...");
+        document.getElementById('listen-btn').disabled = true;
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+                
+                initOrUpdateMap(lat, lon);
+                setStatus(`Position trouvée. Analyse complète...`);
+                fetchFullArticleByCoords(lat, lon);
+            },
+            (error) => {
+                document.getElementById('listen-btn').disabled = false;
+                setStatus("Erreur lors de la récupération GPS.");
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+    }
+
+    function startGuideManual() {
+        const inputField = document.getElementById('manual-place-input');
+        const query = inputField.value.trim();
+        if (!query) {
+            setStatus("Veuillez saisir un nom de lieu.");
+            return;
+        }
+
+        inputField.blur();
+        resetUI();
+        setStatus(`Recherche pour "${query}"...`);
+        fetchFullArticleBySearch(query);
+    }
+
+    async function fetchFullArticleByCoords(lat, lon) {
+        try {
+            const wikiGeoUrl = `https://fr.wikipedia.org/w/api.php?action=query&list=geosearch&gscoord=${lat}|${lon}&gsradius=3000&gslimit=1&format=json&origin=*`;
+            const res = await fetch(wikiGeoUrl);
+            const data = await res.json();
+
+            if (!data.query || !data.query.geosearch || data.query.geosearch.length === 0) {
+                setStatus("Aucun lieu touristique trouvé à proximité.");
+                document.getElementById('listen-btn').disabled = false;
+                return;
+            }
+
+            const pageId = data.query.geosearch[0].pageid;
+            const title = data.query.geosearch[0].title;
+            loadFullArticleDetails(title, pageId);
+
+        } catch (err) {
+            console.error(err);
+            setStatus("Erreur lors de la recherche géographique.");
+            document.getElementById('listen-btn').disabled = false;
+        }
+    }
+
+    async function fetchFullArticleBySearch(queryText) {
+        try {
+            const searchUrl = `https://fr.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(queryText)}&srlimit=1&format=json&origin=*`;
+            const res = await fetch(searchUrl);
+            const data = await res.json();
+
+            if (!data.query || !data.query.search || data.query.search.length === 0) {
+                setStatus(`Aucun résultat trouvé pour "${queryText}".`);
+                document.getElementById('listen-btn').disabled = false;
+                return;
+            }
+
+            const pageId = data.query.search[0].pageid;
+            const title = data.query.search[0].title;
+            loadFullArticleDetails(title, pageId);
+
+        } catch (err) {
+            console.error(err);
+            setStatus("Erreur lors de la recherche textuelle.");
+            document.getElementById('listen-btn').disabled = false;
+        }
+    }
+
+    async function fetchFullArticleByTitle(title) {
+        try {
+            const searchUrl = `https://fr.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(title)}&format=json&origin=*`;
+            const res = await fetch(searchUrl);
+            const data = await res.json();
+            
+            if (data.query && data.query.pages) {
+                const pageId = Object.keys(data.query.pages)[0];
+                if (pageId !== "-1") {
+                    loadFullArticleDetails(title, pageId);
                     return;
                 }
+            }
+            fetchFullArticleBySearch(title);
+        } catch (err) {
+            fetchFullArticleBySearch(title);
+        }
+    }
 
-                navigator.geolocation.getCurrentPosition(
-                    position => resolve(position),
-                    error => {
-                        let errMsg = "Erreur de géolocalisation inconnue.";
-                        switch (error.code) {
-                            case error.PERMISSION_DENIED:
-                                errMsg = "Permission GPS refusée. Veuillez l'activer dans votre navigateur.";
-                                break;
-                            case error.POSITION_UNAVAILABLE:
-                                errMsg = "Position GPS indisponible.";
-                                break;
-                            case error.TIMEOUT:
-                                errMsg = "Délai d'attente dépassé pour la position GPS.";
-                                break;
+    async function loadFullArticleDetails(title, pageId) {
+        try {
+            currentTitle = title;
+            setStatus(`Chargement des photos et du guide pour "${currentTitle}"...`);
+            document.getElementById('article-title').innerText = currentTitle;
+
+            const parseUrl = `https://fr.wikipedia.org/w/api.php?action=parse&pageid=${pageId}&prop=text|images&format=json&origin=*`;
+            const parsePromise = fetch(parseUrl).then(r => r.json());
+
+            const voyUrl = `https://fr.wikivoyage.org/w/api.php?action=query&prop=extracts&exintro=0&explaintext=1&titles=${encodeURIComponent(title)}&format=json&origin=*`;
+            const voyPromise = fetch(voyUrl).then(r => r.json()).catch(() => null);
+
+            const commonsUrl = `https://fr.wikipedia.org/w/api.php?action=query&prop=images|pageimages&piprop=original&pageids=${pageId}&format=json&origin=*`;
+            const commonsPromise = fetch(commonsUrl).then(r => r.json()).catch(() => null);
+
+            const [parseData, voyData, commonsData] = await Promise.all([parsePromise, voyPromise, commonsPromise]);
+
+            const wikiUrl = `https://fr.wikipedia.org/?curid=${pageId}`;
+            const linkElement = document.getElementById('wikipedia-link');
+            linkElement.href = wikiUrl;
+            linkElement.innerText = `📖 Lire "${currentTitle}" sur Wikipédia`;
+            document.getElementById('wikipedia-link-container').style.display = 'block';
+
+            let imageUrls = [];
+
+            if (commonsData && commonsData.query && commonsData.query.pages[pageId] && commonsData.query.pages[pageId].original) {
+                imageUrls.push(commonsData.query.pages[pageId].original.source);
+            }
+
+            if (commonsData && commonsData.query && commonsData.query.pages[pageId] && commonsData.query.pages[pageId].images) {
+                const imgList = commonsData.query.pages[pageId].images;
+                for (let imgObj of imgList) {
+                    let imgTitle = imgObj.title;
+                    if (imgTitle && /\.(jpg|jpeg|png)$/i.test(imgTitle) && !imgTitle.toLowerCase().includes('logo') && !imgTitle.toLowerCase().includes('icon') && !imgTitle.toLowerCase().includes('map')) {
+                        try {
+                            let infoRes = await fetch(`https://fr.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(imgTitle)}&prop=imageinfo&iiprop=url&format=json&origin=*`);
+                            let infoData = await infoRes.json();
+                            let pages = infoData.query.pages;
+                            for (let p in pages) {
+                                if (pages[p].imageinfo && pages[p].imageinfo[0].url) {
+                                    let directUrl = pages[p].imageinfo[0].url;
+                                    if (!imageUrls.includes(directUrl)) {
+                                        imageUrls.push(directUrl);
+                                    }
+                                }
+                            }
+                        } catch (e) {}
+                    }
+                    if (imageUrls.length >= 10) break;
+                }
+            }
+
+            if (imageUrls.length === 0 && parseData && parseData.parse && parseData.parse.text) {
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = parseData.parse.text['*'];
+                tempDiv.querySelectorAll('img').forEach(img => {
+                    let src = img.getAttribute('src');
+                    if (src) {
+                        if (src.startsWith('//')) src = 'https:' + src;
+                        if (!src.toLowerCase().includes('logo') && !src.toLowerCase().includes('icon') && !imageUrls.includes(src)) {
+                            imageUrls.push(src);
                         }
-                        reject(new Error(errMsg));
-                    },
-                    { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
-                );
-            });
-        }
+                    }
+                });
+            }
 
-        // OpenStreetMap Nominatim Reverse Geocoding API Call
-        async function fetchReverseGeocoding(lat, lon) {
-            const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1&accept-language=fr`;
-            const response = await fetch(url, {
-                headers: {
-                    'User-Agent': 'AudioGPSGuideApp/1.0'
+            carouselImages = imageUrls.slice(0, 10);
+
+            if (carouselImages.length > 0) {
+                const track = document.getElementById('carousel-track');
+                const indicators = document.getElementById('carousel-indicators');
+
+                track.innerHTML = '';
+                indicators.innerHTML = '';
+
+                carouselImages.forEach((url, index) => {
+                    const slide = document.createElement('div');
+                    slide.className = 'carousel-slide';
+                    slide.innerHTML = `<img src="${url}" alt="Illustration ${index + 1}">`;
+                    track.appendChild(slide);
+
+                    const dot = document.createElement('div');
+                    dot.className = `indicator ${index === 0 ? 'active' : ''}`;
+                    dot.onclick = () => goToSlide(index);
+                    indicators.appendChild(dot);
+                });
+
+                currentSlideIndex = 0;
+                document.getElementById('carousel-container').style.display = 'block';
+                document.getElementById('sources-badge').innerText = "📚 Synthèse globale avec galerie photo interactive";
+            } else {
+                document.getElementById('sources-badge').innerText = "📚 Synthèse globale de l'article complet";
+            }
+
+            let rawParagraphs = [];
+
+            if (voyData && voyData.query && voyData.query.pages) {
+                const voyPages = voyData.query.pages;
+                for (let id in voyPages) {
+                    if (voyPages[id].extract && voyPages[id].extract.trim() !== "") {
+                        rawParagraphs.push(voyPages[id].extract);
+                    }
                 }
-            });
-
-            if (!response.ok) {
-                throw new Error("Impossible d'obtenir le nom de l'adresse (OpenStreetMap).");
             }
-            return await response.json();
-        }
 
-        // Update Location Details on Card
-        function updateLocationHeader(geoData) {
-            const addr = geoData.address || {};
-            
-            // Determine primary readable title (Landmark, Road, Quarter, City)
-            const mainName = addr.tourism || addr.historic || addr.amenity || addr.building || addr.road || addr.suburb || addr.city || addr.town || "Lieu détecté";
-            const fullAddress = geoData.display_name || "Adresse inconnue";
+            if (parseData && parseData.parse && parseData.parse.text) {
+                const htmlContent = parseData.parse.text['*'];
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = htmlContent;
 
-            locationName.textContent = mainName;
-            locationAddress.textContent = fullAddress;
-        }
+                const unwanted = tempDiv.querySelectorAll('.navbox, .infobox, .reference, .mw-editsection, table, sup');
+                unwanted.forEach(el => el.remove());
 
-        // Fetch AI Description using Gemini API (`gemini-3-flash-preview`)
-        async function fetchGeminiStory(geoData, lat, lon) {
-            const apiKey = ""; // Canvas handles API key runtime insertion
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+                const paragraphs = tempDiv.querySelectorAll('p');
+                paragraphs.forEach(p => {
+                    let text = p.textContent.trim();
+                    text = text.replace(/\[\d+\]/g, '');
+                    if (text.length > 30) {
+                        rawParagraphs.push(text);
+                    }
+                });
+            }
 
-            const addr = geoData.address || {};
-            const locationContext = `
-                Coordonnées GPS: Latitude ${lat}, Longitude ${lon}.
-                Adresse complète: ${geoData.display_name || 'Non spécifiée'}
-                Quartier/Rue: ${addr.road || addr.suburb || ''}
-                Ville/Commune: ${addr.city || addr.town || addr.village || ''}
-                Région/Département: ${addr.state || addr.county || ''}
-                Pays: ${addr.country || ''}
-                Points d'intérêt proches ou type de zone: ${addr.tourism || addr.historic || addr.amenity || addr.leisure || 'Non renseigné'}
-            `;
+            let seenSentences = new Set();
+            combinedContent = [];
 
-            const systemPrompt = `Tu es un guide touristique passionné, chaleureux, érudit et captivant. 
-Ton objectif est de créer une courte présentation audio (environ 3 à 4 phrases bien structurées, d'une durée de lecture orale d'environ 30 à 45 secondes) destinée à être lue à voix haute à l'utilisateur qui se trouve exactement à cet endroit.
-Parle à la deuxième personne ("Vous êtes actuellement..."). Raconte ce qui fait le charme ou la spécificité de cet endroit ou de cette région (histoire, culture, atmosphère, anecdotes ou paysage environnant). 
-Garde un ton engageant, fluide et agréable à l'oreille. Réponds uniquement en français sans balises Markdown particulières.`;
+            for (let para of rawParagraphs) {
+                let sentences = para.split(/(?<=[.!?])\s+/);
+                let uniqueParaSentences = [];
 
-            const userPrompt = `Voici mes données de localisation actuelles :\n${locationContext}\n\nFais-moi un récit vivant et captivant de l'endroit où je me trouve pour mon guide audio !`;
+                for (let sentence of sentences) {
+                    let cleanSentence = sentence.trim();
+                    let normalized = cleanSentence.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"");
 
-            const payload = {
-                contents: [
-                    { parts: [{ text: userPrompt }] }
-                ],
-                systemInstruction: {
-                    parts: [{ text: systemPrompt }]
+                    if (cleanSentence.length > 20 && !seenSentences.has(normalized)) {
+                        seenSentences.add(normalized);
+                        uniqueParaSentences.push(cleanSentence);
+                    }
                 }
-            };
 
-            // Implement simple exponential backoff fetch for robustness
-            let attempts = 0;
-            let response;
-            while (attempts < 3) {
-                try {
-                    response = await fetch(apiUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                    if (response.ok) break;
-                } catch (e) {
-                    console.warn(`Tentative Gemini ${attempts + 1} échouée.`);
+                if (uniqueParaSentences.length > 0) {
+                    combinedContent.push(uniqueParaSentences.join(" "));
                 }
-                attempts++;
-                await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempts)));
             }
 
-            if (!response || !response.ok) {
-                throw new Error("L'API Gemini n'a pas pu générer le résumé touristique.");
-            }
-
-            const data = await response.json();
-            const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-            if (!textResponse) {
-                throw new Error("Réponse vide de Gemini.");
-            }
-
-            return textResponse.trim();
-        }
-
-        // Web Speech API Text-To-Speech Playback
-        function speakText(text) {
-            if (!('speechSynthesis' in window)) {
-                showToast("Votre navigateur ne supporte pas la synthèse vocale.", "error");
+            if (combinedContent.length === 0) {
+                setStatus("Pas assez de contenu disponible pour ce lieu.");
+                document.getElementById('listen-btn').disabled = false;
                 return;
             }
 
-            // Cancel any current speech
+            currentChunkIndex = 0;
+
+            const durationFloat = parseFloat(document.getElementById('duration-select').value);
+            const paragraphsCount = Math.max(2, Math.round(durationFloat * 3.3));
+
+            const initialBatch = combinedContent.slice(currentChunkIndex, currentChunkIndex + paragraphsCount).join(" ");
+            currentChunkIndex += paragraphsCount;
+
+            const outputDiv = document.getElementById('output');
+            outputDiv.innerText = initialBatch;
+            outputDiv.style.display = 'block';
+
+            if (currentChunkIndex < combinedContent.length) {
+                document.getElementById('more-btn').style.display = 'block';
+            }
+
+            setStatus(`Lecture audio en cours (${durationFloat === 1 ? '1 minute' : durationFloat + ' min'})...`);
+            speakText(initialBatch);
+
+        } catch (err) {
+            console.error(err);
+            setStatus("Erreur lors de l'analyse complète de l'article.");
+            document.getElementById('listen-btn').disabled = false;
+        }
+    }
+
+    function goToSlide(index) {
+        if (carouselImages.length === 0) return;
+        currentSlideIndex = (index + carouselImages.length) % carouselImages.length;
+        
+        const track = document.getElementById('carousel-track');
+        track.style.transform = `translateX(-${currentSlideIndex * 100}%)`;
+
+        const indicators = document.getElementById('carousel-indicators').children;
+        for (let i = 0; i < indicators.length; i++) {
+            indicators[i].classList.toggle('active', i === currentSlideIndex);
+        }
+    }
+
+    function loadMoreDetails() {
+        if (currentChunkIndex >= combinedContent.length) {
+            setStatus("Vous avez écouté l'intégralité des chapitres disponibles.");
+            document.getElementById('more-btn').style.display = 'none';
+            return;
+        }
+
+        const nextBatch = combinedContent.slice(currentChunkIndex, currentChunkIndex + 6).join(" ");
+        currentChunkIndex += 6;
+
+        const outputDiv = document.getElementById('output');
+        outputDiv.innerText += "\n\n" + nextBatch;
+        outputDiv.scrollTop = outputDiv.scrollHeight;
+
+        if (currentChunkIndex >= combinedContent.length) {
+            document.getElementById('more-btn').style.display = 'none';
+        }
+
+        setStatus("Lecture de la suite des chapitres...");
+        speakText(nextBatch);
+    }
+
+    function speakText(text) {
+        if (synth.speaking || synth.pending) {
             synth.cancel();
-
-            speechUtterance = new SpeechSynthesisUtterance(text);
-            speechUtterance.lang = 'fr-FR';
-
-            // Apply Voice Selection if available
-            if (selectedVoice) {
-                speechUtterance.voice = selectedVoice;
-            }
-
-            // Apply Speed rate
-            const rateVal = parseFloat(speedRateInput.value) || 1.0;
-            speechUtterance.rate = rateVal;
-
-            // Events listeners for utterance
-            speechUtterance.onstart = () => {
-                setPlaybackUIActive(true);
-                audioPlaybackStatus.textContent = "Lecture en cours...";
-            };
-
-            speechUtterance.onend = () => {
-                setPlaybackUIActive(false);
-                audioPlaybackStatus.textContent = "Lecture terminée.";
-                updateStatus("Lecture terminée.", "emerald");
-            };
-
-            speechUtterance.onerror = (event) => {
-                console.error("SpeechSynthesis error:", event);
-                setPlaybackUIActive(false);
-                audioPlaybackStatus.textContent = "Erreur de lecture audio.";
-            };
-
-            speechUtterance.onpause = () => {
-                audioPlaybackStatus.textContent = "En pause.";
-            };
-
-            speechUtterance.onresume = () => {
-                audioPlaybackStatus.textContent = "Lecture en cours...";
-            };
-
-            // Start Speaking
-            synth.speak(speechUtterance);
         }
 
-        // Toggle Pause & Resume
-        function togglePauseResume() {
-            if (!synth.speaking) return;
+        currentSpokenText = text;
 
-            if (synth.paused) {
-                synth.resume();
-                isPaused = false;
-                pauseIcon.className = "fa-solid fa-pause";
-                equalizerWaves.classList.remove('opacity-40');
-                audioPlaybackStatus.textContent = "Lecture en cours...";
-            } else {
-                synth.pause();
-                isPaused = true;
-                pauseIcon.className = "fa-solid fa-play";
-                equalizerWaves.classList.add('opacity-40');
-                audioPlaybackStatus.textContent = "En pause.";
-            }
-        }
-
-        // Stop Audio Playback
-        function stopAudio() {
-            if (synth.speaking || synth.paused) {
-                synth.cancel();
-            }
-            setPlaybackUIActive(false);
-            audioPlaybackStatus.textContent = "Arrêté.";
-        }
-
-        // UI Helpers
-        function setUIStateLoading(isLoading) {
-            if (isLoading) {
-                btnIcon.classList.add('hidden');
-                btnLabel.classList.add('hidden');
-                btnSpinner.classList.remove('hidden');
-                listenBtn.disabled = true;
-                listenBtn.classList.add('cursor-wait', 'opacity-80');
-                btnGlow.classList.add('pulse-active', 'bg-indigo-500/40');
-            } else {
-                btnSpinner.classList.add('hidden');
-                btnIcon.classList.remove('hidden');
-                btnLabel.classList.remove('hidden');
-                listenBtn.disabled = false;
-                listenBtn.classList.remove('cursor-wait', 'opacity-80');
-                btnGlow.classList.remove('pulse-active', 'bg-indigo-500/40');
-            }
-        }
-
-        function setPlaybackUIActive(isActive) {
-            if (isActive) {
-                audioControlsCard.classList.remove('opacity-60', 'pointer-events-none');
-                pauseBtn.disabled = false;
-                stopBtn.disabled = false;
-                pauseIcon.className = "fa-solid fa-pause";
-                equalizerWaves.classList.remove('opacity-40');
-            } else {
-                pauseBtn.disabled = true;
-                stopBtn.disabled = true;
-                pauseIcon.className = "fa-solid fa-pause";
-                equalizerWaves.classList.add('opacity-40');
-                audioControlsCard.classList.add('opacity-60', 'pointer-events-none');
-            }
-        }
-
-        function updateStatus(message, color = "indigo") {
-            statusText.textContent = message;
+        setTimeout(() => {
+            currentUtterance = new SpeechSynthesisUtterance(text);
+            currentUtterance.lang = 'fr-FR';
             
-            const colorMap = {
-                slate: 'bg-slate-500',
-                indigo: 'bg-indigo-500 animate-pulse',
-                yellow: 'bg-amber-400 animate-pulse',
-                emerald: 'bg-emerald-500',
-                rose: 'bg-rose-500'
+            const bestVoice = getBestFrenchVoice();
+            if (bestVoice) {
+                currentUtterance.voice = bestVoice;
+            }
+
+            const speedSelect = document.getElementById('speed-select');
+            const speechRate = parseFloat(speedSelect.value);
+            currentUtterance.rate = speechRate;
+
+            const wordCount = text.split(/\s+/).length;
+            const baseDurationSeconds = (wordCount / 150) * 60;
+            speechDurationMs = (baseDurationSeconds / speechRate) * 1000;
+
+            document.getElementById('total-time').innerText = formatTime(speechDurationMs / 1000);
+            document.getElementById('current-time').innerText = "0:00";
+            document.getElementById('progress-fill').style.width = "0%";
+            document.getElementById('progress-container').style.display = 'block';
+
+            speechStartTime = Date.now();
+            pauseElapsedMs = 0;
+            isPausedState = false;
+
+            if (progressInterval) clearInterval(progressInterval);
+
+            progressInterval = setInterval(() => {
+                if (!synth.speaking && !synth.paused) return;
+
+                if (!isPausedState) {
+                    const elapsed = Date.now() - speechStartTime + pauseElapsedMs;
+                    const progressRatio = Math.min(1, elapsed / speechDurationMs);
+                    const progressPercent = progressRatio * 100;
+
+                    document.getElementById('progress-fill').style.width = progressPercent + '%';
+                    document.getElementById('current-time').innerText = formatTime(Math.min(speechDurationMs, elapsed) / 1000);
+
+                    if (carouselImages.length > 0) {
+                        const targetSlide = Math.min(
+                            carouselImages.length - 1, 
+                            Math.floor(progressRatio * carouselImages.length)
+                        );
+                        if (targetSlide !== currentSlideIndex) {
+                            goToSlide(targetSlide);
+                        }
+                    }
+                }
+            }, 200);
+
+            currentUtterance.onend = () => {
+                clearInterval(progressInterval);
+                document.getElementById('progress-fill').style.width = "100%";
+                document.getElementById('current-time').innerText = formatTime(speechDurationMs / 1000);
+                setStatus("Lecture terminée.");
+                document.getElementById('listen-btn').disabled = false;
+                document.getElementById('pause-btn').disabled = true;
+                document.getElementById('stop-btn').disabled = true;
+                document.getElementById('pause-btn').innerText = "Pause";
             };
 
-            statusDot.className = `w-2.5 h-2.5 rounded-full ${colorMap[color] || 'bg-indigo-500'}`;
-        }
+            currentUtterance.onerror = (e) => {
+                clearInterval(progressInterval);
+                console.error("Erreur audio détectée :", e);
+                setStatus("Erreur lors de la lecture audio.");
+                document.getElementById('listen-btn').disabled = false;
+            };
 
-        function copyTextToClipboard() {
-            if (!generatedStoryText) return;
+            synth.speak(currentUtterance);
+            document.getElementById('pause-btn').disabled = false;
+            document.getElementById('stop-btn').disabled = false;
+            document.getElementById('pause-btn').innerText = "Pause";
+        }, 100);
+    }
+
+    function changeSpeed() {
+        if (synth.speaking && !synth.paused && currentUtterance) {
+            const speed = parseFloat(document.getElementById('speed-select').value);
+            currentUtterance.rate = speed;
+        }
+    }
+
+    function togglePause() {
+        if (!synth.speaking && !synth.paused) return;
+
+        if (!isPausedState) {
+            synth.cancel();
+            isPausedState = true;
+            pauseElapsedMs += Date.now() - speechStartTime;
+            if (progressInterval) clearInterval(progressInterval);
+            document.getElementById('pause-btn').innerText = "Reprendre";
+            setStatus("Lecture en pause.");
+        } else {
+            isPausedState = false;
+            document.getElementById('pause-btn').innerText = "Pause";
+            setStatus("Lecture audio en cours...");
+
+            currentUtterance = new SpeechSynthesisUtterance(currentSpokenText);
+            currentUtterance.lang = 'fr-FR';
             
-            // Fallback execCommand for iframe compatibility
-            const tempTextArea = document.createElement("textarea");
-            tempTextArea.value = generatedStoryText;
-            document.body.appendChild(tempTextArea);
-            tempTextArea.select();
-            try {
-                document.execCommand('copy');
-                showToast("Texte copié dans le presse-papier !");
-            } catch (err) {
-                showToast("Impossible de copier le texte.", "error");
-            }
-            document.body.removeChild(tempTextArea);
-        }
-
-        function showToast(message, type = "info") {
-            const toast = document.getElementById('toast');
-            const toastMessage = document.getElementById('toast-message');
-            const toastIcon = document.getElementById('toast-icon');
-
-            toastMessage.textContent = message;
-
-            if (type === "error") {
-                toastIcon.className = "fa-solid fa-circle-exclamation text-rose-400 text-lg";
-            } else {
-                toastIcon.className = "fa-solid fa-circle-check text-emerald-400 text-lg";
+            const bestVoice = getBestFrenchVoice();
+            if (bestVoice) {
+                currentUtterance.voice = bestVoice;
             }
 
-            toast.classList.remove('translate-y-20', 'opacity-0');
-            toast.classList.add('translate-y-0', 'opacity-100');
+            const speedSelect = document.getElementById('speed-select');
+            const speechRate = parseFloat(speedSelect.value);
+            currentUtterance.rate = speechRate;
 
-            setTimeout(() => {
-                toast.classList.remove('translate-y-0', 'opacity-100');
-                toast.classList.add('translate-y-20', 'opacity-0');
-            }, 3500);
+            speechStartTime = Date.now();
+
+            if (progressInterval) clearInterval(progressInterval);
+            progressInterval = setInterval(() => {
+                if (!synth.speaking && !synth.paused) return;
+
+                if (!isPausedState) {
+                    const elapsed = Date.now() - speechStartTime + pauseElapsedMs;
+                    const progressRatio = Math.min(1, elapsed / speechDurationMs);
+                    const progressPercent = progressRatio * 100;
+
+                    document.getElementById('progress-fill').style.width = progressPercent + '%';
+                    document.getElementById('current-time').innerText = formatTime(Math.min(speechDurationMs, elapsed) / 1000);
+
+                    if (carouselImages.length > 0) {
+                        const targetSlide = Math.min(
+                            carouselImages.length - 1, 
+                            Math.floor(progressRatio * carouselImages.length)
+                        );
+                        if (targetSlide !== currentSlideIndex) {
+                            goToSlide(targetSlide);
+                        }
+                    }
+                }
+            }, 200);
+
+            currentUtterance.onend = () => {
+                clearInterval(progressInterval);
+                document.getElementById('progress-fill').style.width = "100%";
+                document.getElementById('current-time').innerText = formatTime(speechDurationMs / 1000);
+                setStatus("Lecture terminée.");
+                document.getElementById('listen-btn').disabled = false;
+                document.getElementById('pause-btn').disabled = true;
+                document.getElementById('stop-btn').disabled = true;
+                document.getElementById('pause-btn').innerText = "Pause";
+            };
+
+            currentUtterance.onerror = (e) => {
+                clearInterval(progressInterval);
+                setStatus("Erreur lors de la reprise audio.");
+                document.getElementById('listen-btn').disabled = false;
+            };
+
+            synth.speak(currentUtterance);
         }
-    </script>
+    }
+
+    function stopAudio() {
+        if (synth.speaking || synth.paused) {
+            synth.cancel();
+            if (progressInterval) clearInterval(progressInterval);
+            setStatus("Lecture arrêtée.");
+            document.getElementById('progress-container').style.display = 'none';
+            document.getElementById('listen-btn').disabled = false;
+            document.getElementById('pause-btn').disabled = true;
+            document.getElementById('stop-btn').disabled = true;
+            document.getElementById('pause-btn').innerText = "Pause";
+        }
+    }
+</script>
+
 </body>
 </html>
