@@ -95,6 +95,7 @@
             width: 100%;
             margin: 12px 0;
             display: none;
+            position: relative;
         }
         #map {
             width: 100%;
@@ -102,6 +103,27 @@
             border-radius: 12px;
             border: 1px solid #3a506b;
             box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        
+        /* Bouton flottant pour rechercher sur un nouveau centre de carte */
+        #search-here-btn {
+            position: absolute;
+            bottom: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background-color: #ffd166;
+            color: #0b132b;
+            border: none;
+            padding: 8px 16px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            border-radius: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            cursor: pointer;
+            display: none;
+            width: auto;
+            margin-bottom: 0;
         }
 
         .divider {
@@ -341,6 +363,7 @@
     <!-- Zone de carte Leaflet -->
     <div id="map-container">
         <div id="map"></div>
+        <button id="search-here-btn" onclick="searchOnCurrentMapCenter()">🔍 Rechercher ici</button>
     </div>
     
     <div class="divider"><span>OU SAISIR UN LIEU</span></div>
@@ -348,6 +371,17 @@
     <div class="search-box">
         <input type="text" id="manual-place-input" placeholder="Ex: Big Ben, Tour Eiffel..." onkeypress="handleKeyPress(event)">
         <button id="search-btn" onclick="startGuideManual()">🔍</button>
+    </div>
+
+    <!-- Sélecteur de Rayon -->
+    <div class="config-control">
+        <label for="radius-select">Rayon de recherche :</label>
+        <select id="radius-select" onchange="changeRadius()">
+            <option value="100">100 mètres</option>
+            <option value="200" selected>200 mètres</option>
+            <option value="500">500 mètres</option>
+            <option value="1000">1 kilomètre</option>
+        </select>
     </div>
 
     <div class="config-control">
@@ -409,7 +443,7 @@
         <a id="wikipedia-link" href="#" target="_blank">📖 Lire l'article complet sur Wikipédia</a>
     </div>
 
-    <div class="app-version">2026.11.8.5</div>
+    <div class="app-version">2026.11.8.8</div>
 </div>
 
 <script>
@@ -435,6 +469,8 @@
     let userMarker = null;
     let poiLayerGroup = null;
     let radiusCircle = null;
+    let currentLat = null;
+    let currentLon = null;
 
     function loadVoices() {
         availableVoices = synth.getVoices();
@@ -496,59 +532,99 @@
         }
     }
 
-    function initOrUpdateMap(lat, lon) {
+    function getSelectedRadius() {
+        const select = document.getElementById('radius-select');
+        return parseInt(select.value, 10);
+    }
+
+    function changeRadius() {
+        if (currentLat !== null && currentLon !== null) {
+            // Relancer la recherche si la carte est déjà initialisée
+            initOrUpdateMap(currentLat, currentLon, true);
+        }
+    }
+
+    function initOrUpdateMap(lat, lon, isNewCenter = true) {
+        currentLat = lat;
+        currentLon = lon;
         const mapContainer = document.getElementById('map-container');
         mapContainer.style.display = 'block';
 
-        const radiusMeters = 300; // Rayon de 300 mètres
+        const radiusMeters = getSelectedRadius();
+        // Adapter le zoom de la carte en fonction du rayon sélectionné
+        let zoomLevel = 16;
+        if (radiusMeters === 100) zoomLevel = 17;
+        else if (radiusMeters === 500) zoomLevel = 15;
+        else if (radiusMeters === 1000) zoomLevel = 14;
 
         if (!map) {
-            map = L.map('map').setView([lat, lon], 15);
+            map = L.map('map').setView([lat, lon], zoomLevel);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
                 attribution: '&copy; OpenStreetMap'
             }).addTo(map);
 
             poiLayerGroup = L.layerGroup().addTo(map);
-        } else {
-            map.setView([lat, lon], 15);
+
+            map.on('moveend', () => {
+                document.getElementById('search-here-btn').style.display = 'block';
+            });
+        } else if (isNewCenter) {
+            map.setView([lat, lon], zoomLevel);
+        }
+
+        if (isNewCenter) {
             poiLayerGroup.clearLayers();
             if (userMarker) map.removeLayer(userMarker);
             if (radiusCircle) map.removeLayer(radiusCircle);
+
+            userMarker = L.circleMarker([lat, lon], {
+                radius: 8,
+                fillColor: "#007aff",
+                color: "#ffffff",
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.9
+            }).addTo(map).bindPopup(`<b>Centre de recherche (${radiusMeters}m)</b>`);
+
+            radiusCircle = L.circle([lat, lon], {
+                color: '#ffd166',
+                fillColor: '#ffd166',
+                fillOpacity: 0.15,
+                radius: radiusMeters
+            }).addTo(map);
+
+            document.getElementById('search-here-btn').style.display = 'none';
+            fetchPOIsAround(lat, lon, radiusMeters);
         }
 
-        // Marqueur bleu pour l'utilisateur
-        userMarker = L.circleMarker([lat, lon], {
-            radius: 8,
-            fillColor: "#007aff",
-            color: "#ffffff",
-            weight: 2,
-            opacity: 1,
-            fillOpacity: 0.9
-        }).addTo(map).bindPopup("<b>Votre position</b>");
-
-        // Cercle délimitant le rayon de 300 m
-        radiusCircle = L.circle([lat, lon], {
-            color: '#ffd166',
-            fillColor: '#ffd166',
-            fillOpacity: 0.1,
-            radius: radiusMeters
-        }).addTo(map);
-
         setTimeout(() => { map.invalidateSize(); }, 200);
+    }
 
-        // Recherche des points d'intérêt dans le rayon de 300m
-        fetchPOIsAround(lat, lon, radiusMeters);
+    function searchOnCurrentMapCenter() {
+        const center = map.getCenter();
+        initOrUpdateMap(center.lat, center.lng, true);
     }
 
     async function fetchPOIsAround(lat, lon, radius) {
         try {
+            setStatus(`Recherche des points touristiques (${radius}m)...`);
             const query = `
                 [out:json][timeout:25];
                 (
-                  node["wikipedia"](around:${radius},${lat},${lon});
-                  way["wikipedia"](around:${radius},${lat},${lon});
-                  relation["wikipedia"](around:${radius},${lat},${lon});
+                  node["tourism"](around:${radius},${lat},${lon});
+                  way["tourism"](around:${radius},${lat},${lon});
+                  relation["tourism"](around:${radius},${lat},${lon});
+
+                  node["historic"](around:${radius},${lat},${lon});
+                  way["historic"](around:${radius},${lat},${lon});
+                  relation["historic"](around:${radius},${lat},${lon});
+
+                  node["amenity"="place_of_worship"](around:${radius},${lat},${lon});
+                  way["amenity"="place_of_worship"](around:${radius},${lat},${lon});
+
+                  node["leisure"="park"](around:${radius},${lat},${lon});
+                  way["leisure"="park"](around:${radius},${lat},${lon});
                 );
                 out center;
             `;
@@ -557,7 +633,7 @@
             const data = await response.json();
 
             if (!data.elements || data.elements.length === 0) {
-                setStatus("Carte affichée. Aucun point Wikipédia trouvé dans un rayon de 300m.");
+                setStatus(`Aucun point touristique trouvé dans un rayon de ${radius}m.`);
                 document.getElementById('listen-btn').disabled = false;
                 return;
             }
@@ -585,7 +661,6 @@
                     
                     redMarker.on('click', () => {
                         resetUI();
-                        initOrUpdateMap(itemLat, itemLon); 
                         setStatus(`Chargement de : "${wikiTitle}"...`);
                         fetchFullArticleByTitle(wikiTitle);
                     });
@@ -595,12 +670,12 @@
                 }
             });
 
-            setStatus(`Carte prête (${count} lieu${count > 1 ? 'x' : ''} trouvé${count > 1 ? 's' : ''} à proximité). Cliquez sur un point rouge.`);
+            setStatus(`Zone prête (${count} lieu${count > 1 ? 'x' : ''} touristique${count > 1 ? 's' : ''}). Cliquez sur un point rouge.`);
             document.getElementById('listen-btn').disabled = false;
 
         } catch (err) {
             console.error("Erreur chargement Overpass POIs:", err);
-            setStatus("Carte affichée (erreur de chargement des points d'intérêt).");
+            setStatus("Erreur lors du chargement des points d'intérêt.");
             document.getElementById('listen-btn').disabled = false;
         }
     }
@@ -619,7 +694,7 @@
             (position) => {
                 const lat = position.coords.latitude;
                 const lon = position.coords.longitude;
-                initOrUpdateMap(lat, lon);
+                initOrUpdateMap(lat, lon, true);
             },
             (error) => {
                 document.getElementById('listen-btn').disabled = false;
@@ -795,7 +870,6 @@
                 const tempDiv = document.createElement('div');
                 tempDiv.innerHTML = htmlContent;
 
-                // Suppression des éléments indésirables et des boîtes d'homonymie / avertissements
                 const unwanted = tempDiv.querySelectorAll('.navbox, .infobox, .reference, .mw-editsection, table, sup, .homonymie, .ambig, .dablink');
                 unwanted.forEach(el => el.remove());
 
@@ -804,7 +878,6 @@
                     let text = p.textContent.trim();
                     text = text.replace(/\[\d+\]/g, '');
                     
-                    // Filtrage supplémentaire pour ignorer les phrases d'homonymie ou d'orientation textuelles
                     if (
                         text.length > 30 &&
                         !text.toLowerCase().startsWith("pour les articles homonymes") &&
@@ -1021,7 +1094,7 @@
 
             const speedSelect = document.getElementById('speed-select');
             const speechRate = parseFloat(speedSelect.value);
-            currentUtterance.rate = speedRate;
+            currentUtterance.rate = speechRate;
 
             speechStartTime = Date.now();
 
