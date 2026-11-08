@@ -409,7 +409,7 @@
         <a id="wikipedia-link" href="#" target="_blank">📖 Lire l'article complet sur Wikipédia</a>
     </div>
 
-    <div class="app-version">2026.11.8.4</div>
+    <div class="app-version">2026.11.8.5</div>
 </div>
 
 <script>
@@ -585,7 +585,6 @@
                     
                     redMarker.on('click', () => {
                         resetUI();
-                        // Conserver la carte affichée lors du clic sur un point
                         initOrUpdateMap(itemLat, itemLon); 
                         setStatus(`Chargement de : "${wikiTitle}"...`);
                         fetchFullArticleByTitle(wikiTitle);
@@ -620,7 +619,6 @@
             (position) => {
                 const lat = position.coords.latitude;
                 const lon = position.coords.longitude;
-                
                 initOrUpdateMap(lat, lon);
             },
             (error) => {
@@ -797,14 +795,22 @@
                 const tempDiv = document.createElement('div');
                 tempDiv.innerHTML = htmlContent;
 
-                const unwanted = tempDiv.querySelectorAll('.navbox, .infobox, .reference, .mw-editsection, table, sup');
+                // Suppression des éléments indésirables et des boîtes d'homonymie / avertissements
+                const unwanted = tempDiv.querySelectorAll('.navbox, .infobox, .reference, .mw-editsection, table, sup, .homonymie, .ambig, .dablink');
                 unwanted.forEach(el => el.remove());
 
                 const paragraphs = tempDiv.querySelectorAll('p');
                 paragraphs.forEach(p => {
                     let text = p.textContent.trim();
                     text = text.replace(/\[\d+\]/g, '');
-                    if (text.length > 30) {
+                    
+                    // Filtrage supplémentaire pour ignorer les phrases d'homonymie ou d'orientation textuelles
+                    if (
+                        text.length > 30 &&
+                        !text.toLowerCase().startsWith("pour les articles homonymes") &&
+                        !text.toLowerCase().startsWith("pour les articles ayant des noms") &&
+                        !text.toLowerCase().includes(" homonyme")
+                    ) {
                         rawParagraphs.push(text);
                     }
                 });
@@ -821,7 +827,12 @@
                     let cleanSentence = sentence.trim();
                     let normalized = cleanSentence.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"");
 
-                    if (cleanSentence.length > 20 && !seenSentences.has(normalized)) {
+                    if (
+                        cleanSentence.length > 20 && 
+                        !seenSentences.has(normalized) &&
+                        !cleanSentence.toLowerCase().includes("homonyme") &&
+                        !cleanSentence.toLowerCase().startsWith("pour les articles")
+                    ) {
                         seenSentences.add(normalized);
                         uniqueParaSentences.push(cleanSentence);
                     }
@@ -1010,7 +1021,7 @@
 
             const speedSelect = document.getElementById('speed-select');
             const speechRate = parseFloat(speedSelect.value);
-            currentUtterance.rate = speechRate;
+            currentUtterance.rate = speedRate;
 
             speechStartTime = Date.now();
 
