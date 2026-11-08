@@ -336,7 +336,7 @@
 <div class="card">
     <h1>🌍 Guide Audio Touristique</h1>
     
-    <button id="listen-btn" onclick="startGuideGPS()">📍 Écouter le lieu actuel (GPS)</button>
+    <button id="listen-btn" onclick="startGuideGPS()">📍 Découvrir (GPS)</button>
 
     <!-- Zone de carte Leaflet -->
     <div id="map-container">
@@ -409,7 +409,7 @@
         <a id="wikipedia-link" href="#" target="_blank">📖 Lire l'article complet sur Wikipédia</a>
     </div>
 
-    <div class="app-version">2026.11.8.3</div>
+    <div class="app-version">2026.11.8.4</div>
 </div>
 
 <script>
@@ -500,7 +500,7 @@
         const mapContainer = document.getElementById('map-container');
         mapContainer.style.display = 'block';
 
-        const radiusMeters = 300; // Rayon ajusté à 300 mètres
+        const radiusMeters = 300; // Rayon de 300 mètres
 
         if (!map) {
             map = L.map('map').setView([lat, lon], 15);
@@ -543,7 +543,6 @@
 
     async function fetchPOIsAround(lat, lon, radius) {
         try {
-            // Requête Overpass API pour chercher les objets ayant un tag wikipedia
             const query = `
                 [out:json][timeout:25];
                 (
@@ -558,19 +557,21 @@
             const data = await response.json();
 
             if (!data.elements || data.elements.length === 0) {
+                setStatus("Carte affichée. Aucun point Wikipédia trouvé dans un rayon de 300m.");
+                document.getElementById('listen-btn').disabled = false;
                 return;
             }
 
+            let count = 0;
             data.elements.forEach(el => {
                 const itemLat = el.lat || (el.center && el.center.lat);
                 const itemLon = el.lon || (el.center && el.center.lon);
                 
                 if (itemLat && itemLon && el.tags && el.tags.wikipedia) {
-                    const wikiTag = el.tags.wikipedia; // Ex: "fr:Tour Eiffel" ou "Tour Eiffel"
+                    const wikiTag = el.tags.wikipedia; 
                     let wikiTitle = wikiTag.includes(':') ? wikiTag.split(':')[1] : wikiTag;
                     const name = el.tags.name || wikiTitle;
 
-                    // Créer un point rouge pour chaque élément wikipédia
                     const redMarker = L.circleMarker([itemLat, itemLon], {
                         radius: 7,
                         fillColor: "#ff4d4d",
@@ -584,15 +585,24 @@
                     
                     redMarker.on('click', () => {
                         resetUI();
+                        // Conserver la carte affichée lors du clic sur un point
+                        initOrUpdateMap(itemLat, itemLon); 
                         setStatus(`Chargement de : "${wikiTitle}"...`);
                         fetchFullArticleByTitle(wikiTitle);
                     });
 
                     poiLayerGroup.addLayer(redMarker);
+                    count++;
                 }
             });
+
+            setStatus(`Carte prête (${count} lieu${count > 1 ? 'x' : ''} trouvé${count > 1 ? 's' : ''} à proximité). Cliquez sur un point rouge.`);
+            document.getElementById('listen-btn').disabled = false;
+
         } catch (err) {
             console.error("Erreur chargement Overpass POIs:", err);
+            setStatus("Carte affichée (erreur de chargement des points d'intérêt).");
+            document.getElementById('listen-btn').disabled = false;
         }
     }
 
@@ -612,8 +622,6 @@
                 const lon = position.coords.longitude;
                 
                 initOrUpdateMap(lat, lon);
-                setStatus(`Position trouvée. Analyse complète...`);
-                fetchFullArticleByCoords(lat, lon);
             },
             (error) => {
                 document.getElementById('listen-btn').disabled = false;
@@ -635,29 +643,6 @@
         resetUI();
         setStatus(`Recherche pour "${query}"...`);
         fetchFullArticleBySearch(query);
-    }
-
-    async function fetchFullArticleByCoords(lat, lon) {
-        try {
-            const wikiGeoUrl = `https://fr.wikipedia.org/w/api.php?action=query&list=geosearch&gscoord=${lat}|${lon}&gsradius=3000&gslimit=1&format=json&origin=*`;
-            const res = await fetch(wikiGeoUrl);
-            const data = await res.json();
-
-            if (!data.query || !data.query.geosearch || data.query.geosearch.length === 0) {
-                setStatus("Aucun lieu touristique trouvé à proximité.");
-                document.getElementById('listen-btn').disabled = false;
-                return;
-            }
-
-            const pageId = data.query.geosearch[0].pageid;
-            const title = data.query.geosearch[0].title;
-            loadFullArticleDetails(title, pageId);
-
-        } catch (err) {
-            console.error(err);
-            setStatus("Erreur lors de la recherche géographique.");
-            document.getElementById('listen-btn').disabled = false;
-        }
     }
 
     async function fetchFullArticleBySearch(queryText) {
@@ -849,7 +834,6 @@
 
             if (combinedContent.length === 0) {
                 setStatus("Pas assez de contenu disponible pour ce lieu.");
-                document.getElementById('listen-btn').disabled = false;
                 return;
             }
 
@@ -875,7 +859,6 @@
         } catch (err) {
             console.error(err);
             setStatus("Erreur lors de l'analyse complète de l'article.");
-            document.getElementById('listen-btn').disabled = false;
         }
     }
 
@@ -977,7 +960,6 @@
                 document.getElementById('progress-fill').style.width = "100%";
                 document.getElementById('current-time').innerText = formatTime(speechDurationMs / 1000);
                 setStatus("Lecture terminée.");
-                document.getElementById('listen-btn').disabled = false;
                 document.getElementById('pause-btn').disabled = true;
                 document.getElementById('stop-btn').disabled = true;
                 document.getElementById('pause-btn').innerText = "Pause";
@@ -987,7 +969,6 @@
                 clearInterval(progressInterval);
                 console.error("Erreur audio détectée :", e);
                 setStatus("Erreur lors de la lecture audio.");
-                document.getElementById('listen-btn').disabled = false;
             };
 
             synth.speak(currentUtterance);
@@ -1062,7 +1043,6 @@
                 document.getElementById('progress-fill').style.width = "100%";
                 document.getElementById('current-time').innerText = formatTime(speechDurationMs / 1000);
                 setStatus("Lecture terminée.");
-                document.getElementById('listen-btn').disabled = false;
                 document.getElementById('pause-btn').disabled = true;
                 document.getElementById('stop-btn').disabled = true;
                 document.getElementById('pause-btn').innerText = "Pause";
@@ -1071,7 +1051,6 @@
             currentUtterance.onerror = (e) => {
                 clearInterval(progressInterval);
                 setStatus("Erreur lors de la reprise audio.");
-                document.getElementById('listen-btn').disabled = false;
             };
 
             synth.speak(currentUtterance);
@@ -1084,7 +1063,6 @@
             if (progressInterval) clearInterval(progressInterval);
             setStatus("Lecture arrêtée.");
             document.getElementById('progress-container').style.display = 'none';
-            document.getElementById('listen-btn').disabled = false;
             document.getElementById('pause-btn').disabled = true;
             document.getElementById('stop-btn').disabled = true;
             document.getElementById('pause-btn').innerText = "Pause";
