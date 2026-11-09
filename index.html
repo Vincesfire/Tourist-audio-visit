@@ -432,7 +432,7 @@
         <a id="wikipedia-link" href="#" target="_blank">📖 Lire l'article complet sur Wikipédia</a>
     </div>
 
-    <div class="app-version">2026.11.9.8</div>
+    <div class="app-version">2026.11.9.9</div>
 </div>
 
 <script>
@@ -570,102 +570,81 @@
         );
     }
 
-    function searchPOIsOnCurrentView() {
+    // Recherche ultra-rapide via Nominatim (OpenStreetMap Search Indexé)
+    async function searchPOIsOnCurrentView() {
         const bounds = map.getBounds();
-        const southWest = bounds.getSouthWest();
-        const northEast = bounds.getNorthEast();
-        
-        // Sécurité anti-zoom trop large pour éviter de surcharger Overpass
-        const latSpan = northEast.lat - southWest.lat;
-        const lngSpan = northEast.lng - southWest.lng;
-        if (latSpan > 0.5 || lngSpan > 0.5) {
-            setStatus("Zone trop grande ! Zoomez un peu plus sur la carte avant de rechercher.");
-            return;
-        }
+        const south = bounds.getSouth();
+        const west = bounds.getWest();
+        const north = bounds.getNorth();
+        const east = bounds.getEast();
 
-        fetchPOIsBox(southWest.lat, southWest.lng, northEast.lat, northEast.lng);
-    }
+        setStatus("Recherche instantanée des lieux...");
 
-    async function fetchPOIsBox(s, w, n, e) {
         try {
-            setStatus("Recherche des points touristiques dans la zone affichée...");
-            const query = `
-                [out:json][timeout:25];
-                (
-                  node["tourism"](${s},${w},${n},${e});
-                  way["tourism"](${s},${w},${n},${e});
-                  relation["tourism"](${s},${w},${n},${e});
-
-                  node["historic"](${s},${w},${n},${e});
-                  way["historic"](${s},${w},${n},${e});
-                  relation["historic"](${s},${w},${n},${e});
-
-                  node["amenity"="place_of_worship"](${s},${w},${n},${e});
-                  way["amenity"="place_of_worship"](${s},${w},${n},${e});
-                  relation["amenity"="place_of_worship"](${s},${w},${n},${e});
-
-                  node["leisure"="park"](${s},${w},${n},${e});
-                  way["leisure"](${s},${w},${n},${e});
-                  relation["leisure"="park"](${s},${w},${n},${e});
-                );
-                out center;
-            `;
-            const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
-            const response = await fetch(overpassUrl);
+            // Utilisation de Nominatim avec l'emprise visuelle (viewbox) et le paramètre extra_tags pour cibler Wikipédia
+            const url = `https://nominatim.openstreetmap.org/search?format=json&bounded=1&viewbox=${west},${north},${east},${south}&amenity=place_of_worship,historic,tourism,attraction&limit=30&extratags=1&accept-language=fr`;
             
-            if (!response.ok) {
-                throw new Error(`Erreur HTTP: ${response.status}`);
-            }
+            const response = await fetch(url, {
+                headers: {
+                    'Accept-Language': 'fr'
+                }
+            });
+
+            if (!response.ok) throw new Error("Erreur réseau");
 
             const data = await response.json();
             poiLayerGroup.clearLayers();
 
-            if (!data.elements || data.elements.length === 0) {
-                setStatus("Aucun point touristique trouvé dans cette zone visible.");
+            if (!data || data.length === 0) {
+                setStatus("Aucun lieu touristique indexé trouvé dans cette vue.");
                 return;
             }
 
             let count = 0;
-            data.elements.forEach(el => {
-                const itemLat = el.lat || (el.center && el.center.lat);
-                const itemLon = el.lon || (el.center && el.center.lon);
+            data.forEach(item => {
+                const lat = parseFloat(item.lat);
+                const lon = parseFloat(item.lon);
+                const name = item.display_name ? item.display_name.split(',')[0] : "Lieu d'intérêt";
                 
-                if (itemLat && itemLon && el.tags && el.tags.wikipedia) {
-                    const wikiTag = el.tags.wikipedia; 
-                    let wikiTitle = wikiTag.includes(':') ? wikiTag.split(':')[1] : wikiTag;
-                    const name = el.tags.name || wikiTitle;
-
-                    const redMarker = L.circleMarker([itemLat, itemLon], {
-                        radius: 7,
-                        fillColor: "#ff4d4d",
-                        color: "#ffffff",
-                        weight: 2,
-                        opacity: 1,
-                        fillOpacity: 0.9
-                    });
-
-                    redMarker.bindPopup(`<b>${name}</b><br><small>Cliquez pour écouter l'explication</small>`);
-                    
-                    redMarker.on('click', () => {
-                        resetUI();
-                        setStatus(`Chargement de : "${wikiTitle}"...`);
-                        fetchFullArticleByTitle(wikiTitle);
-                    });
-
-                    poiLayerGroup.addLayer(redMarker);
-                    count++;
+                // Récupération intelligente du titre Wikipédia si présent dans les tags extra
+                let wikiTitle = null;
+                if (item.extratags) {
+                    if (item.extratags.wikipedia) {
+                        wikiTitle = item.extratags.wikipedia.includes(':') ? item.extratags.wikipedia.split(':')[1] : item.extratags.wikipedia;
+                    } else if (item.extratags['wikipedia:fr']) {
+                        wikiTitle = item.extratags['wikipedia:fr'];
+                    }
                 }
+                if (!wikiTitle) {
+                    wikiTitle = name; // Fallback sur le nom du lieu
+                }
+
+                const redMarker = L.circleMarker([lat, lon], {
+                    radius: 7,
+                    fillColor: "#ff4d4d",
+                    color: "#ffffff",
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.9
+                });
+
+                redMarker.bindPopup(`<b>${name}</b><br><small>Cliquez pour écouter l'explication</small>`);
+                
+                redMarker.on('click', () => {
+                    resetUI();
+                    setStatus(`Chargement de : "${wikiTitle}"...`);
+                    fetchFullArticleByTitle(wikiTitle);
+                });
+
+                poiLayerGroup.addLayer(redMarker);
+                count++;
             });
 
-            if (count === 0) {
-                setStatus("Lieux trouvés, mais aucun ne possède d'article Wikipédia associé dans cette zone.");
-            } else {
-                setStatus(`Zone prête (${count} lieu${count > 1 ? 'x' : ''} touristique${count > 1 ? 's' : ''}). Cliquez sur un point rouge.`);
-            }
+            setStatus(`Zone prête (${count} lieu${count > 1 ? 'x' : ''}). Cliquez sur un point rouge.`);
 
         } catch (err) {
-            console.error("Erreur chargement Overpass POIs:", err);
-            setStatus("Erreur lors de la requête Overpass (réseau ou surcharge). Réessayez.");
+            console.error("Erreur recherche rapide:", err);
+            setStatus("Erreur lors de la recherche rapide des lieux.");
         }
     }
 
