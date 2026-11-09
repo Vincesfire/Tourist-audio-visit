@@ -90,40 +90,35 @@
             box-shadow: none;
         }
         
-        /* Conteneur de la Carte */
+        /* Conteneur de la Carte (affiché dès le départ) */
         #map-container {
             width: 100%;
             margin: 12px 0;
-            display: none;
+            display: block;
             position: relative;
         }
         #map {
             width: 100%;
-            height: 280px;
+            height: 260px;
             border-radius: 12px;
             border: 1px solid #3a506b;
             box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
         
-        /* Bouton flottant pour rechercher sur un nouveau centre de carte */
-        #search-here-btn {
-            position: absolute;
-            bottom: 15px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 1000;
-            background-color: #ffd166;
-            color: #0b132b;
-            border: none;
-            padding: 8px 16px;
-            font-size: 0.85rem;
-            font-weight: 700;
-            border-radius: 20px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-            cursor: pointer;
-            display: none;
-            width: auto;
+        /* Ligne de boutons GPS et Recherche */
+        .gps-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .gps-row button {
             margin-bottom: 0;
+            font-size: 0.9rem;
+            padding: 12px 10px;
+        }
+        #search-tourist-btn {
+            background-color: #06d6a0;
+            color: #0b132b;
         }
 
         .divider {
@@ -318,7 +313,6 @@
             margin-bottom: 8px;
         }
         
-        /* Zone de texte sans scroll, s'adapte automatiquement à la hauteur du texte complet */
         #output {
             text-align: left;
             background: #0b132b;
@@ -364,12 +358,15 @@
 <div class="card">
     <h1>🌍 Guide Audio Touristique</h1>
     
-    <button id="listen-btn" onclick="startGuideGPS()">📍 Me localiser (GPS)</button>
-
-    <!-- Zone de carte Leaflet -->
+    <!-- Zone de carte Leaflet affichée immédiatement -->
     <div id="map-container">
         <div id="map"></div>
-        <button id="search-here-btn" onclick="searchOnCurrentMapCenter()">🔍 Rechercher ici</button>
+    </div>
+
+    <!-- Ligne des boutons GPS et Recherche de lieux -->
+    <div class="gps-row">
+        <button id="listen-btn" onclick="updateGPSLocation()">📍 Me localiser (GPS)</button>
+        <button id="search-tourist-btn" onclick="searchPOIsOnCurrentView()">🔍 Rechercher les lieux</button>
     </div>
     
     <div class="divider"><span>OU SAISIR UN LIEU</span></div>
@@ -427,7 +424,7 @@
 
     <button id="more-btn" class="more-btn" onclick="loadMoreDetails()">📖 En savoir plus (+ de chapitres)</button>
 
-    <div id="status">Choisissez une méthode pour démarrer.</div>
+    <div id="status">Carte prête. Déplacez-la ou cliquez sur "Rechercher les lieux".</div>
     
     <div id="carousel-container">
         <div class="carousel-wrapper">
@@ -447,7 +444,7 @@
         <a id="wikipedia-link" href="#" target="_blank">📖 Lire l'article complet sur Wikipédia</a>
     </div>
 
-    <div class="app-version">2026.11.9.2</div>
+    <div class="app-version">2026.11.9.3</div>
 </div>
 
 <script>
@@ -473,8 +470,8 @@
     let userMarker = null;
     let poiLayerGroup = null;
     let radiusCircle = null;
-    let currentLat = null;
-    let currentLon = null;
+    let currentLat = 48.8566; // Paris par défaut pour affichage immédiat rapide
+    let currentLon = 2.3522;
 
     function loadVoices() {
         availableVoices = synth.getVoices();
@@ -509,6 +506,187 @@
         const mins = Math.floor(seconds / 60);
         const secs = Math.floor(seconds % 60);
         return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    }
+
+    // Initialisation immédiate de la carte au chargement de la page
+    window.addEventListener('DOMContentLoaded', () => {
+        initMap(currentLat, currentLon, false);
+        // Tentative optionnelle et rapide d'obtenir la position GPS au démarrage
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    currentLat = position.coords.latitude;
+                    currentLon = position.coords.longitude;
+                    initMap(currentLat, currentLon, true);
+                    searchPOIsOnCurrentView();
+                },
+                (error) => {
+                    // Silencieux si refusé ou lent, la carte reste sur la position par défaut
+                },
+                { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 }
+            );
+        }
+    });
+
+    function initMap(lat, lon, updateView = true) {
+        currentLat = lat;
+        currentLon = lon;
+        const radiusMeters = getSelectedRadius();
+        let zoomLevel = 16;
+        if (radiusMeters === 100) zoomLevel = 17;
+        else if (radiusMeters === 500) zoomLevel = 15;
+        else if (radiusMeters === 1000) zoomLevel = 14;
+
+        if (!map) {
+            map = L.map('map').setView([lat, lon], zoomLevel);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap'
+            }).addTo(map);
+
+            poiLayerGroup = L.layerGroup().addTo(map);
+        } else if (updateView) {
+            map.setView([lat, lon], zoomLevel);
+        }
+
+        updateMarkersAndCircle(lat, lon, radiusMeters);
+        setTimeout(() => { map.invalidateSize(); }, 200);
+    }
+
+    function updateMarkersAndCircle(lat, lon, radiusMeters) {
+        if (userMarker) map.removeLayer(userMarker);
+        if (radiusCircle) map.removeLayer(radiusCircle);
+
+        userMarker = L.circleMarker([lat, lon], {
+            radius: 8,
+            fillColor: "#007aff",
+            color: "#ffffff",
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.9
+        }).addTo(map).bindPopup(`<b>Centre de recherche (${radiusMeters}m)</b>`);
+
+        radiusCircle = L.circle([lat, lon], {
+            color: '#ffd166',
+            fillColor: '#ffd166',
+            fillOpacity: 0.15,
+            radius: radiusMeters
+        }).addTo(map);
+    }
+
+    function updateGPSLocation() {
+        if (!navigator.geolocation) {
+            setStatus("La géolocalisation n'est pas supportée par votre navigateur.");
+            return;
+        }
+
+        setStatus("Recherche de votre position GPS précise...");
+        document.getElementById('listen-btn').disabled = true;
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+                initMap(lat, lon, true);
+                searchPOIsOnCurrentView();
+                document.getElementById('listen-btn').disabled = false;
+            },
+            (error) => {
+                document.getElementById('listen-btn').disabled = false;
+                setStatus("Erreur lors de la récupération GPS.");
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+    }
+
+    function searchPOIsOnCurrentView() {
+        const center = map.getCenter();
+        const radiusMeters = getSelectedRadius();
+        initMap(center.lat, center.lng, false);
+        fetchPOIsAround(center.lat, center.lng, radiusMeters);
+    }
+
+    function getSelectedRadius() {
+        const select = document.getElementById('radius-select');
+        return parseInt(select.value, 10);
+    }
+
+    function changeRadius() {
+        const center = map.getCenter();
+        initMap(center.lat, center.lng, false);
+    }
+
+    async function fetchPOIsAround(lat, lon, radius) {
+        try {
+            setStatus(`Recherche des points touristiques (${radius}m)...`);
+            const query = `
+                [out:json][timeout:25];
+                (
+                  node["tourism"](around:${radius},${lat},${lon});
+                  way["tourism"](around:${radius},${lat},${lon});
+                  relation["tourism"](around:${radius},${lat},${lon});
+
+                  node["historic"](around:${radius},${lat},${lon});
+                  way["historic"](around:${radius},${lat},${lon});
+                  relation["historic"](around:${radius},${lat},${lon});
+
+                  node["amenity"="place_of_worship"](around:${radius},${lat},${lon});
+                  way["amenity"="place_of_worship"](around:${radius},${lat},${lon});
+
+                  node["leisure"="park"](around:${radius},${lat},${lon});
+                  way["leisure"="park"](around:${radius},${lat},${lon});
+                );
+                out center;
+            `;
+            const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+            const response = await fetch(overpassUrl);
+            const data = await response.json();
+
+            poiLayerGroup.clearLayers();
+
+            if (!data.elements || data.elements.length === 0) {
+                setStatus(`Aucun point touristique trouvé dans un rayon de ${radius}m.`);
+                return;
+            }
+
+            let count = 0;
+            data.elements.forEach(el => {
+                const itemLat = el.lat || (el.center && el.center.lat);
+                const itemLon = el.lon || (el.center && el.center.lon);
+                
+                if (itemLat && itemLon && el.tags && el.tags.wikipedia) {
+                    const wikiTag = el.tags.wikipedia; 
+                    let wikiTitle = wikiTag.includes(':') ? wikiTag.split(':')[1] : wikiTag;
+                    const name = el.tags.name || wikiTitle;
+
+                    const redMarker = L.circleMarker([itemLat, itemLon], {
+                        radius: 7,
+                        fillColor: "#ff4d4d",
+                        color: "#ffffff",
+                        weight: 2,
+                        opacity: 1,
+                        fillOpacity: 0.9
+                    });
+
+                    redMarker.bindPopup(`<b>${name}</b><br><small>Cliquez pour écouter l'explication</small>`);
+                    
+                    redMarker.on('click', () => {
+                        resetUI();
+                        setStatus(`Chargement de : "${wikiTitle}"...`);
+                        fetchFullArticleByTitle(wikiTitle);
+                    });
+
+                    poiLayerGroup.addLayer(redMarker);
+                    count++;
+                }
+            });
+
+            setStatus(`Zone prête (${count} lieu${count > 1 ? 'x' : ''} touristique${count > 1 ? 's' : ''}). Cliquez sur un point rouge.`);
+
+        } catch (err) {
+            console.error("Erreur chargement Overpass POIs:", err);
+            setStatus("Erreur lors du chargement des points d'intérêt.");
+        }
     }
 
     function resetUI() {
@@ -546,176 +724,6 @@
         }
     }
 
-    function getSelectedRadius() {
-        const select = document.getElementById('radius-select');
-        return parseInt(select.value, 10);
-    }
-
-    function changeRadius() {
-        if (currentLat !== null && currentLon !== null) {
-            initOrUpdateMap(currentLat, currentLon, true);
-        }
-    }
-
-    function initOrUpdateMap(lat, lon, isNewCenter = true) {
-        currentLat = lat;
-        currentLon = lon;
-        const mapContainer = document.getElementById('map-container');
-        mapContainer.style.display = 'block';
-
-        const radiusMeters = getSelectedRadius();
-        let zoomLevel = 16;
-        if (radiusMeters === 100) zoomLevel = 17;
-        else if (radiusMeters === 500) zoomLevel = 15;
-        else if (radiusMeters === 1000) zoomLevel = 14;
-
-        if (!map) {
-            map = L.map('map').setView([lat, lon], zoomLevel);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 19,
-                attribution: '&copy; OpenStreetMap'
-            }).addTo(map);
-
-            poiLayerGroup = L.layerGroup().addTo(map);
-
-            map.on('moveend', () => {
-                document.getElementById('search-here-btn').style.display = 'block';
-            });
-        } else if (isNewCenter) {
-            map.setView([lat, lon], zoomLevel);
-        }
-
-        if (isNewCenter) {
-            poiLayerGroup.clearLayers();
-            if (userMarker) map.removeLayer(userMarker);
-            if (radiusCircle) map.removeLayer(radiusCircle);
-
-            userMarker = L.circleMarker([lat, lon], {
-                radius: 8,
-                fillColor: "#007aff",
-                color: "#ffffff",
-                weight: 2,
-                opacity: 1,
-                fillOpacity: 0.9
-            }).addTo(map).bindPopup(`<b>Centre de recherche (${radiusMeters}m)</b>`);
-
-            radiusCircle = L.circle([lat, lon], {
-                color: '#ffd166',
-                fillColor: '#ffd166',
-                fillOpacity: 0.15,
-                radius: radiusMeters
-            }).addTo(map);
-
-            document.getElementById('search-here-btn').style.display = 'none';
-            fetchPOIsAround(lat, lon, radiusMeters);
-        }
-
-        setTimeout(() => { map.invalidateSize(); }, 200);
-    }
-
-    function searchOnCurrentMapCenter() {
-        const center = map.getCenter();
-        initOrUpdateMap(center.lat, center.lng, true);
-    }
-
-    async function fetchPOIsAround(lat, lon, radius) {
-        try {
-            setStatus(`Recherche des points touristiques (${radius}m)...`);
-            const query = `
-                [out:json][timeout:25];
-                (
-                  node["tourism"](around:${radius},${lat},${lon});
-                  way["tourism"](around:${radius},${lat},${lon});
-                  relation["tourism"](around:${radius},${lat},${lon});
-
-                  node["historic"](around:${radius},${lat},${lon});
-                  way["historic"](around:${radius},${lat},${lon});
-                  relation["historic"](around:${radius},${lat},${lon});
-
-                  node["amenity"="place_of_worship"](around:${radius},${lat},${lon});
-                  way["amenity"="place_of_worship"](around:${radius},${lat},${lon});
-
-                  node["leisure"="park"](around:${radius},${lat},${lon});
-                  way["leisure"="park"](around:${radius},${lat},${lon});
-                );
-                out center;
-            `;
-            const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
-            const response = await fetch(overpassUrl);
-            const data = await response.json();
-
-            if (!data.elements || data.elements.length === 0) {
-                setStatus(`Aucun point touristique trouvé dans un rayon de ${radius}m.`);
-                document.getElementById('listen-btn').disabled = false;
-                return;
-            }
-
-            let count = 0;
-            data.elements.forEach(el => {
-                const itemLat = el.lat || (el.center && el.center.lat);
-                const itemLon = el.lon || (el.center && el.center.lon);
-                
-                if (itemLat && itemLon && el.tags && el.tags.wikipedia) {
-                    const wikiTag = el.tags.wikipedia; 
-                    let wikiTitle = wikiTag.includes(':') ? wikiTag.split(':')[1] : wikiTag;
-                    const name = el.tags.name || wikiTitle;
-
-                    const redMarker = L.circleMarker([itemLat, itemLon], {
-                        radius: 7,
-                        fillColor: "#ff4d4d",
-                        color: "#ffffff",
-                        weight: 2,
-                        opacity: 1,
-                        fillOpacity: 0.9
-                    });
-
-                    redMarker.bindPopup(`<b>${name}</b><br><small>Cliquez pour écouter l'explication</small>`);
-                    
-                    redMarker.on('click', () => {
-                        resetUI();
-                        setStatus(`Chargement de : "${wikiTitle}"...`);
-                        fetchFullArticleByTitle(wikiTitle);
-                    });
-
-                    poiLayerGroup.addLayer(redMarker);
-                    count++;
-                }
-            });
-
-            setStatus(`Zone prête (${count} lieu${count > 1 ? 'x' : ''} touristique${count > 1 ? 's' : ''}). Cliquez sur un point rouge.`);
-            document.getElementById('listen-btn').disabled = false;
-
-        } catch (err) {
-            console.error("Erreur chargement Overpass POIs:", err);
-            setStatus("Erreur lors du chargement des points d'intérêt.");
-            document.getElementById('listen-btn').disabled = false;
-        }
-    }
-
-    function startGuideGPS() {
-        resetUI();
-        if (!navigator.geolocation) {
-            setStatus("La géolocalisation n'est pas supportée par votre navigateur.");
-            return;
-        }
-
-        setStatus("Recherche de votre position GPS...");
-        document.getElementById('listen-btn').disabled = true;
-
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                const lat = position.coords.latitude;
-                const lon = position.coords.longitude;
-                initOrUpdateMap(lat, lon, true);
-            },
-            (error) => {
-                document.getElementById('listen-btn').disabled = false;
-                setStatus("Erreur lors de la récupération GPS.");
-            },
-            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-        );
-    }
-
     function startGuideManual() {
         const inputField = document.getElementById('manual-place-input');
         const query = inputField.value.trim();
@@ -738,7 +746,6 @@
 
             if (!data.query || !data.query.search || data.query.search.length === 0) {
                 setStatus(`Aucun résultat trouvé pour "${queryText}".`);
-                document.getElementById('listen-btn').disabled = false;
                 return;
             }
 
@@ -749,7 +756,6 @@
         } catch (err) {
             console.error(err);
             setStatus("Erreur lors de la recherche textuelle.");
-            document.getElementById('listen-btn').disabled = false;
         }
     }
 
