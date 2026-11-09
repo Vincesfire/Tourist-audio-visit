@@ -105,7 +105,7 @@
             box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
         
-        /* Ligne de boutons GPS et Recherche de lieux sur la même ligne */
+        /* Double bouton GPS et Recherche sur la même ligne */
         .gps-row {
             display: flex;
             gap: 8px;
@@ -176,7 +176,7 @@
             display: none;
         }
         
-        /* Paramètres alignés sur une seule ligne */
+        /* Paramètres (Durée et Vitesse) alignés sur une seule ligne */
         .config-row {
             display: flex;
             gap: 6px;
@@ -313,7 +313,6 @@
             margin-bottom: 8px;
         }
         
-        /* Zone de texte sans scroll, s'adapte automatiquement à la hauteur du texte complet */
         #output {
             text-align: left;
             background: #0b132b;
@@ -377,17 +376,8 @@
         <button id="search-btn" onclick="startGuideManual()">🔍</button>
     </div>
 
-    <!-- Paramètres sur une seule ligne -->
+    <!-- Paramètres (Durée et Vitesse) sur une seule ligne -->
     <div class="config-row">
-        <div class="config-item">
-            <label for="radius-select">Rayon</label>
-            <select id="radius-select" onchange="changeRadius()">
-                <option value="100">100m</option>
-                <option value="200" selected>200m</option>
-                <option value="500">500m</option>
-                <option value="1000">1km</option>
-            </select>
-        </div>
         <div class="config-item">
             <label for="duration-select">Durée</label>
             <select id="duration-select">
@@ -425,7 +415,7 @@
 
     <button id="more-btn" class="more-btn" onclick="loadMoreDetails()">📖 En savoir plus (+ de chapitres)</button>
 
-    <div id="status">Carte prête. Déplacez-la ou cliquez sur "Rechercher les lieux".</div>
+    <div id="status">Carte prête. Déplacez-la et cliquez sur "Rechercher les lieux".</div>
     
     <div id="carousel-container">
         <div class="carousel-wrapper">
@@ -445,7 +435,7 @@
         <a id="wikipedia-link" href="#" target="_blank">📖 Lire l'article complet sur Wikipédia</a>
     </div>
 
-    <div class="app-version">2026.11.9.5</div>
+    <div class="app-version">2026.11.9.7</div>
 </div>
 
 <script>
@@ -470,8 +460,7 @@
     let map = null;
     let userMarker = null;
     let poiLayerGroup = null;
-    let radiusCircle = null;
-    let currentLat = 48.8566; // Paris par défaut pour chargement rapide
+    let currentLat = 48.8566; // Paris par défaut
     let currentLon = 2.3522;
 
     function loadVoices() {
@@ -529,14 +518,9 @@
     function initMap(lat, lon, updateView = true) {
         currentLat = lat;
         currentLon = lon;
-        const radiusMeters = getSelectedRadius();
-        let zoomLevel = 16;
-        if (radiusMeters === 100) zoomLevel = 17;
-        else if (radiusMeters === 500) zoomLevel = 15;
-        else if (radiusMeters === 1000) zoomLevel = 14;
 
         if (!map) {
-            map = L.map('map').setView([lat, lon], zoomLevel);
+            map = L.map('map').setView([lat, lon], 15);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
                 attribution: '&copy; OpenStreetMap'
@@ -544,16 +528,15 @@
 
             poiLayerGroup = L.layerGroup().addTo(map);
         } else if (updateView) {
-            map.setView([lat, lon], zoomLevel);
+            map.setView([lat, lon], 15);
         }
 
-        updateMarkersAndCircle(lat, lon, radiusMeters);
+        updateUserMarker(lat, lon);
         setTimeout(() => { map.invalidateSize(); }, 200);
     }
 
-    function updateMarkersAndCircle(lat, lon, radiusMeters) {
+    function updateUserMarker(lat, lon) {
         if (userMarker) map.removeLayer(userMarker);
-        if (radiusCircle) map.removeLayer(radiusCircle);
 
         userMarker = L.circleMarker([lat, lon], {
             radius: 8,
@@ -562,14 +545,7 @@
             weight: 2,
             opacity: 1,
             fillOpacity: 0.9
-        }).addTo(map).bindPopup(`<b>Centre de recherche (${radiusMeters}m)</b>`);
-
-        radiusCircle = L.circle([lat, lon], {
-            color: '#ffd166',
-            fillColor: '#ffd166',
-            fillOpacity: 0.15,
-            radius: radiusMeters
-        }).addTo(map);
+        }).addTo(map).bindPopup(`<b>Votre position</b>`);
     }
 
     function updateGPSLocation() {
@@ -597,42 +573,35 @@
         );
     }
 
+    // Recherche les lieux en fonction de l'emprise visible sur la carte
     function searchPOIsOnCurrentView() {
-        const center = map.getCenter();
-        const radiusMeters = getSelectedRadius();
-        initMap(center.lat, center.lng, false);
-        fetchPOIsAround(center.lat, center.lng, radiusMeters);
+        const bounds = map.getBounds();
+        const southWest = bounds.getSouthWest();
+        const northEast = bounds.getNorthEast();
+        fetchPOIsBox(southWest.lat, southWest.lng, northEast.lat, northEast.lng);
     }
 
-    function getSelectedRadius() {
-        const select = document.getElementById('radius-select');
-        return parseInt(select.value, 10);
-    }
-
-    function changeRadius() {
-        const center = map.getCenter();
-        initMap(center.lat, center.lng, false);
-    }
-
-    async function fetchPOIsAround(lat, lon, radius) {
+    async function fetchPOIsBox(s, w, n, e) {
         try {
-            setStatus(`Recherche des points touristiques (${radius}m)...`);
+            setStatus("Recherche des points touristiques dans la zone affichée...");
             const query = `
                 [out:json][timeout:25];
                 (
-                  node["tourism"](around:${radius},${lat},${lon});
-                  way["tourism"](around:${radius},${lat},${lon});
-                  relation["tourism"](around:${radius},${lat},${lon});
+                  node["tourism"](${s},${w},${n},${e});
+                  way["tourism"](${s},${w},${n},${e});
+                  relation["tourism"](${s},${w},${n},${e});
 
-                  node["historic"](around:${radius},${lat},${lon});
-                  way["historic"](around:${radius},${lat},${lon});
-                  relation["historic"](around:${radius},${lat},${lon});
+                  node["historic"](${s},${w},${n},${e});
+                  way["historic"](${s},${w},${n},${e});
+                  relation["historic"](${s},${w},${n},${e});
 
-                  node["amenity"="place_of_worship"](around:${radius},${lat},${lon});
-                  way["amenity"="place_of_worship"](around:${radius},${lat},${lon});
+                  node["amenity"="place_of_worship"](${s},${w},${n},${e});
+                  way["amenity"="place_of_worship"](${s},${w},${n},${e});
+                  relation["amenity"="place_of_worship"](${s},${w},${n},${e});
 
-                  node["leisure"="park"](around:${radius},${lat},${lon});
-                  way["leisure"="park"](around:${radius},${lat},${lon});
+                  node["leisure"="park"](${s},${w},${n},${e});
+                  way["leisure"="park"](${s},${w},${n},${e});
+                  relation["leisure"="park"](${s},${w},${n},${e});
                 );
                 out center;
             `;
@@ -643,7 +612,7 @@
             poiLayerGroup.clearLayers();
 
             if (!data.elements || data.elements.length === 0) {
-                setStatus(`Aucun point touristique trouvé dans un rayon de ${radius}m.`);
+                setStatus("Aucun point touristique trouvé dans cette zone visible.");
                 return;
             }
 
@@ -939,7 +908,6 @@
 
             currentChunkIndex = 0;
 
-            // Calcul rigoureux du nombre de paragraphes en fonction de la durée choisie
             const durationFloat = parseFloat(document.getElementById('duration-select').value);
             const paragraphsCount = Math.max(1, Math.round(durationFloat * 1.8));
 
