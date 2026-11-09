@@ -180,27 +180,43 @@
             margin-bottom: 10px;
             display: none;
         }
-        .config-control {
-            margin: 8px 0;
+        
+        /* Conteneur global pour aligner les options sur une seule ligne */
+        .config-row {
             display: flex;
-            align-items: center;
-            justify-content: space-between;
-            font-size: 0.9rem;
-            color: #b0c4de;
+            gap: 6px;
+            margin: 8px 0;
+        }
+        .config-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
             background: #0b132b;
-            padding: 8px 12px;
+            padding: 6px 8px;
             border-radius: 12px;
             border: 1px solid #3a506b;
+            text-align: center;
         }
-        .config-control select {
-            padding: 6px 10px;
+        .config-item label {
+            font-size: 0.7rem;
+            color: #8d99ae;
+            margin-bottom: 4px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .config-item select {
+            width: 100%;
+            padding: 6px 4px;
             border-radius: 8px;
             border: 1px solid #3a506b;
             background: #1c2541;
             color: #ffffff;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             outline: none;
+            text-align: center;
         }
+
         #status {
             margin: 10px 0;
             font-size: 0.85rem;
@@ -363,37 +379,37 @@
         <button id="search-btn" onclick="startGuideManual()">🔍</button>
     </div>
 
-    <!-- Sélecteur de Rayon -->
-    <div class="config-control">
-        <label for="radius-select">Rayon de recherche :</label>
-        <select id="radius-select" onchange="changeRadius()">
-            <option value="100">100 mètres</option>
-            <option value="200" selected>200 mètres</option>
-            <option value="500">500 mètres</option>
-            <option value="1000">1 kilomètre</option>
-        </select>
-    </div>
-
-    <div class="config-control">
-        <label for="duration-select">Durée de l'explication :</label>
-        <select id="duration-select">
-            <option value="1">1 minute</option>
-            <option value="2" selected>2 minutes</option>
-            <option value="4">4 minutes</option>
-            <option value="6">6 minutes</option>
-        </select>
-    </div>
-
-    <div class="config-control">
-        <label for="speed-select">Vitesse de lecture :</label>
-        <select id="speed-select" onchange="changeSpeed()">
-            <option value="0.75">0.75x (Lent)</option>
-            <option value="1.0">1.0x (Normal)</option>
-            <option value="1.1" selected>1.1x (Idéal)</option>
-            <option value="1.25">1.25x (Rapide)</option>
-            <option value="1.5">1.5x (Très rapide)</option>
-            <option value="2.0">2.0x (Max)</option>
-        </select>
+    <!-- Paramètres sur une seule ligne -->
+    <div class="config-row">
+        <div class="config-item">
+            <label for="radius-select">Rayon</label>
+            <select id="radius-select" onchange="changeRadius()">
+                <option value="100">100m</option>
+                <option value="200" selected>200m</option>
+                <option value="500">500m</option>
+                <option value="1000">1km</option>
+            </select>
+        </div>
+        <div class="config-item">
+            <label for="duration-select">Durée</label>
+            <select id="duration-select">
+                <option value="1">1 min</option>
+                <option value="2" selected>2 min</option>
+                <option value="4">4 min</option>
+                <option value="6">6 min</option>
+            </select>
+        </div>
+        <div class="config-item">
+            <label for="speed-select">Vitesse</label>
+            <select id="speed-select" onchange="changeSpeed()">
+                <option value="0.75">0.75x</option>
+                <option value="1.0">1.0x</option>
+                <option value="1.1" selected>1.1x</option>
+                <option value="1.25">1.25x</option>
+                <option value="1.5">1.5x</option>
+                <option value="2.0">2.0x</option>
+            </select>
+        </div>
     </div>
 
     <!-- Bouton unique Play / Pause -->
@@ -431,7 +447,7 @@
         <a id="wikipedia-link" href="#" target="_blank">📖 Lire l'article complet sur Wikipédia</a>
     </div>
 
-    <div class="app-version">2026.11.9.1</div>
+    <div class="app-version">2026.11.9.2</div>
 </div>
 
 <script>
