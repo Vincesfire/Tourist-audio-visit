@@ -313,6 +313,8 @@
             color: #8d99ae;
             margin-bottom: 8px;
         }
+        
+        /* Zone de texte sans scroll, s'adapte automatiquement à la hauteur du texte complet */
         #output {
             text-align: left;
             background: #0b132b;
@@ -320,14 +322,15 @@
             border-radius: 10px;
             font-size: 0.9rem;
             line-height: 1.4;
-            max-height: 160px;
-            overflow-y: auto;
             margin-top: 8px;
             display: none;
             color: #e2e8f0;
             border: 1px solid #3a506b;
-            -webkit-overflow-scrolling: touch;
+            /* Suppression des limites de hauteur pour voir tout le texte */
+            max-height: none;
+            overflow-y: visible;
         }
+
         #wikipedia-link-container {
             margin-top: 14px;
             display: none;
@@ -358,7 +361,7 @@
 <div class="card">
     <h1>🌍 Guide Audio Touristique</h1>
     
-    <button id="listen-btn" onclick="startGuideGPS()">📍 Découvrir (GPS)</button>
+    <button id="listen-btn" onclick="startGuideGPS()">📍 Me localiser (GPS)</button>
 
     <!-- Zone de carte Leaflet -->
     <div id="map-container">
@@ -407,7 +410,7 @@
     </div>
 
     <div class="controls">
-        <button id="pause-btn" class="secondary-btn" onclick="togglePause()" disabled>Pause</button>
+        <button id="play-pause-btn" class="secondary-btn" onclick="togglePlayPause()" disabled>⏸️ Pause</button>
         <button id="stop-btn" class="secondary-btn" onclick="stopAudio()" disabled>Arrêter</button>
     </div>
 
@@ -443,7 +446,7 @@
         <a id="wikipedia-link" href="#" target="_blank">📖 Lire l'article complet sur Wikipédia</a>
     </div>
 
-    <div class="app-version">2026.11.8.8</div>
+    <div class="app-version">2026.11.8.11</div>
 </div>
 
 <script>
@@ -510,6 +513,7 @@
     function resetUI() {
         stopAudio();
         document.getElementById('output').style.display = 'none';
+        document.getElementById('output').innerText = '';
         document.getElementById('article-title').innerText = '';
         document.getElementById('sources-badge').innerText = '';
         document.getElementById('carousel-container').style.display = 'none';
@@ -539,7 +543,6 @@
 
     function changeRadius() {
         if (currentLat !== null && currentLon !== null) {
-            // Relancer la recherche si la carte est déjà initialisée
             initOrUpdateMap(currentLat, currentLon, true);
         }
     }
@@ -551,7 +554,6 @@
         mapContainer.style.display = 'block';
 
         const radiusMeters = getSelectedRadius();
-        // Adapter le zoom de la carte en fonction du rayon sélectionné
         let zoomLevel = 16;
         if (radiusMeters === 100) zoomLevel = 17;
         else if (radiusMeters === 500) zoomLevel = 15;
@@ -971,7 +973,6 @@
 
         const outputDiv = document.getElementById('output');
         outputDiv.innerText += "\n\n" + nextBatch;
-        outputDiv.scrollTop = outputDiv.scrollHeight;
 
         if (currentChunkIndex >= combinedContent.length) {
             document.getElementById('more-btn').style.display = 'none';
@@ -1044,9 +1045,9 @@
                 document.getElementById('progress-fill').style.width = "100%";
                 document.getElementById('current-time').innerText = formatTime(speechDurationMs / 1000);
                 setStatus("Lecture terminée.");
-                document.getElementById('pause-btn').disabled = true;
+                document.getElementById('play-pause-btn').disabled = true;
                 document.getElementById('stop-btn').disabled = true;
-                document.getElementById('pause-btn').innerText = "Pause";
+                document.getElementById('play-pause-btn').innerText = "▶️ Lecture";
             };
 
             currentUtterance.onerror = (e) => {
@@ -1056,9 +1057,9 @@
             };
 
             synth.speak(currentUtterance);
-            document.getElementById('pause-btn').disabled = false;
+            document.getElementById('play-pause-btn').disabled = false;
             document.getElementById('stop-btn').disabled = false;
-            document.getElementById('pause-btn').innerText = "Pause";
+            document.getElementById('play-pause-btn').innerText = "⏸️ Pause";
         }, 100);
     }
 
@@ -1069,7 +1070,7 @@
         }
     }
 
-    function togglePause() {
+    function togglePlayPause() {
         if (!synth.speaking && !synth.paused) return;
 
         if (!isPausedState) {
@@ -1077,11 +1078,11 @@
             isPausedState = true;
             pauseElapsedMs += Date.now() - speechStartTime;
             if (progressInterval) clearInterval(progressInterval);
-            document.getElementById('pause-btn').innerText = "Reprendre";
+            document.getElementById('play-pause-btn').innerText = "▶️ Lecture";
             setStatus("Lecture en pause.");
         } else {
             isPausedState = false;
-            document.getElementById('pause-btn').innerText = "Pause";
+            document.getElementById('play-pause-btn').innerText = "⏸️ Pause";
             setStatus("Lecture audio en cours...");
 
             currentUtterance = new SpeechSynthesisUtterance(currentSpokenText);
@@ -1094,7 +1095,7 @@
 
             const speedSelect = document.getElementById('speed-select');
             const speechRate = parseFloat(speedSelect.value);
-            currentUtterance.rate = speechRate;
+            currentUtterance.rate = speedRate;
 
             speechStartTime = Date.now();
 
@@ -1127,9 +1128,9 @@
                 document.getElementById('progress-fill').style.width = "100%";
                 document.getElementById('current-time').innerText = formatTime(speechDurationMs / 1000);
                 setStatus("Lecture terminée.");
-                document.getElementById('pause-btn').disabled = true;
+                document.getElementById('play-pause-btn').disabled = true;
                 document.getElementById('stop-btn').disabled = true;
-                document.getElementById('pause-btn').innerText = "Pause";
+                document.getElementById('play-pause-btn').innerText = "▶️ Lecture";
             };
 
             currentUtterance.onerror = (e) => {
@@ -1147,9 +1148,9 @@
             if (progressInterval) clearInterval(progressInterval);
             setStatus("Lecture arrêtée.");
             document.getElementById('progress-container').style.display = 'none';
-            document.getElementById('pause-btn').disabled = true;
+            document.getElementById('play-pause-btn').disabled = true;
             document.getElementById('stop-btn').disabled = true;
-            document.getElementById('pause-btn').innerText = "Pause";
+            document.getElementById('play-pause-btn').innerText = "▶️ Lecture";
         }
     }
 </script>
