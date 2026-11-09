@@ -172,18 +172,6 @@
             align-items: center;
             justify-content: center;
         }
-        .controls {
-            display: flex;
-            gap: 8px;
-            margin-top: 4px;
-        }
-        .secondary-btn {
-            background-color: #28385e;
-            color: #f0f2f5;
-            padding: 12px;
-            font-size: 0.9rem;
-            border: 1px solid #3a506b;
-        }
         .more-btn {
             background-color: #28385e;
             color: #ffd166;
@@ -326,7 +314,6 @@
             display: none;
             color: #e2e8f0;
             border: 1px solid #3a506b;
-            /* Suppression des limites de hauteur pour voir tout le texte */
             max-height: none;
             overflow-y: visible;
         }
@@ -409,10 +396,8 @@
         </select>
     </div>
 
-    <div class="controls">
-        <button id="play-pause-btn" class="secondary-btn" onclick="togglePlayPause()" disabled>⏸️ Pause</button>
-        <button id="stop-btn" class="secondary-btn" onclick="stopAudio()" disabled>Arrêter</button>
-    </div>
+    <!-- Bouton unique Play / Pause -->
+    <button id="play-pause-btn" onclick="togglePlayPause()" disabled>⏸️ Pause</button>
 
     <div id="progress-container">
         <div class="progress-bar-bg">
@@ -446,7 +431,7 @@
         <a id="wikipedia-link" href="#" target="_blank">📖 Lire l'article complet sur Wikipédia</a>
     </div>
 
-    <div class="app-version">2026.11.8.11</div>
+    <div class="app-version">2026.11.9.1</div>
 </div>
 
 <script>
@@ -511,7 +496,10 @@
     }
 
     function resetUI() {
-        stopAudio();
+        if (synth.speaking || synth.paused) {
+            synth.cancel();
+        }
+        if (progressInterval) clearInterval(progressInterval);
         document.getElementById('output').style.display = 'none';
         document.getElementById('output').innerText = '';
         document.getElementById('article-title').innerText = '';
@@ -522,11 +510,17 @@
         document.getElementById('wikipedia-link-container').style.display = 'none';
         document.getElementById('more-btn').style.display = 'none';
         document.getElementById('progress-container').style.display = 'none';
+        
+        document.getElementById('play-pause-btn').disabled = true;
+        document.getElementById('play-pause-btn').innerText = "▶️ Lecture";
+
         combinedContent = [];
         currentChunkIndex = 0;
         carouselImages = [];
         currentSlideIndex = 0;
         currentSpokenText = "";
+        isPausedState = false;
+        pauseElapsedMs = 0;
     }
 
     function handleKeyPress(event) {
@@ -1046,7 +1040,6 @@
                 document.getElementById('current-time').innerText = formatTime(speechDurationMs / 1000);
                 setStatus("Lecture terminée.");
                 document.getElementById('play-pause-btn').disabled = true;
-                document.getElementById('stop-btn').disabled = true;
                 document.getElementById('play-pause-btn').innerText = "▶️ Lecture";
             };
 
@@ -1058,7 +1051,6 @@
 
             synth.speak(currentUtterance);
             document.getElementById('play-pause-btn').disabled = false;
-            document.getElementById('stop-btn').disabled = false;
             document.getElementById('play-pause-btn').innerText = "⏸️ Pause";
         }, 100);
     }
@@ -1095,7 +1087,7 @@
 
             const speedSelect = document.getElementById('speed-select');
             const speechRate = parseFloat(speedSelect.value);
-            currentUtterance.rate = speedRate;
+            currentUtterance.rate = speechRate;
 
             speechStartTime = Date.now();
 
@@ -1129,7 +1121,6 @@
                 document.getElementById('current-time').innerText = formatTime(speechDurationMs / 1000);
                 setStatus("Lecture terminée.");
                 document.getElementById('play-pause-btn').disabled = true;
-                document.getElementById('stop-btn').disabled = true;
                 document.getElementById('play-pause-btn').innerText = "▶️ Lecture";
             };
 
@@ -1139,18 +1130,6 @@
             };
 
             synth.speak(currentUtterance);
-        }
-    }
-
-    function stopAudio() {
-        if (synth.speaking || synth.paused) {
-            synth.cancel();
-            if (progressInterval) clearInterval(progressInterval);
-            setStatus("Lecture arrêtée.");
-            document.getElementById('progress-container').style.display = 'none';
-            document.getElementById('play-pause-btn').disabled = true;
-            document.getElementById('stop-btn').disabled = true;
-            document.getElementById('play-pause-btn').innerText = "▶️ Lecture";
         }
     }
 </script>
