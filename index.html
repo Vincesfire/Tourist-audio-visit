@@ -432,7 +432,7 @@
         <a id="wikipedia-link" href="#" target="_blank">📖 Lire l'article complet sur Wikipédia</a>
     </div>
 
-    <div class="app-version">2026.11.9.10</div>
+    <div class="app-version">2026.11.9.11</div>
 </div>
 
 <script>
@@ -570,7 +570,7 @@
         );
     }
 
-    // Recherche ultra-rapide et tolérante par emprise géographique via Overpass optimisé
+    // Recherche ultra-rapide filtrée STRICTEMENT sur le tourisme et le patrimoine culturel
     async function searchPOIsOnCurrentView() {
         const bounds = map.getBounds();
         const s = bounds.getSouth();
@@ -578,21 +578,22 @@
         const n = bounds.getNorth();
         const e = bounds.getEast();
 
-        setStatus("Recherche rapide des lieux...");
+        setStatus("Recherche des sites touristiques et culturels...");
 
         try {
             const query = `
                 [out:json][timeout:15];
                 (
-                  node["tourism"](${s},${w},${n},${e});
-                  way["tourism"](${s},${w},${n},${e});
+                  node["tourism"~"attraction|viewpoint|museum|artwork"](${s},${w},${n},${e});
+                  way["tourism"~"attraction|viewpoint|museum|artwork"](${s},${w},${n},${e});
+                  
                   node["historic"](${s},${w},${n},${e});
                   way["historic"](${s},${w},${n},${e});
-                  node["amenity"="place_of_worship"](${s},${w},${n},${e});
-                  way["amenity"="place_of_worship"](${s},${w},${n},${e});
-                  node["leisure"="park"](${s},${w},${n},${e});
+                  
+                  node["amenity"="place_of_worship"]["historic"](${s},${w},${n},${e});
+                  way["amenity"="place_of_worship"]["historic"](${s},${w},${n},${e});
                 );
-                out center 50;
+                out center 60;
             `;
             const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
             const response = await fetch(overpassUrl);
@@ -603,7 +604,7 @@
             poiLayerGroup.clearLayers();
 
             if (!data.elements || data.elements.length === 0) {
-                setStatus("Aucun lieu trouvé dans cette vue. Zoomez ou déplacez la carte.");
+                setStatus("Aucun site touristique trouvé dans cette vue. Zoomez ou déplacez la carte.");
                 return;
             }
 
@@ -612,8 +613,8 @@
                 const itemLat = el.lat || (el.center && el.center.lat);
                 const itemLon = el.lon || (el.center && el.center.lon);
                 
-                if (itemLat && itemLon && el.tags) {
-                    const name = el.tags.name || el.tags.historic || el.tags.tourism || "Lieu d'intérêt";
+                if (itemLat && itemLon && el.tags && el.tags.name) {
+                    const name = el.tags.name;
                     let wikiTitle = null;
 
                     if (el.tags.wikipedia) {
@@ -621,7 +622,7 @@
                     } else if (el.tags['wikipedia:fr']) {
                         wikiTitle = el.tags['wikipedia:fr'];
                     } else {
-                        wikiTitle = name; // Fallback direct sur le nom si pas de tag wiki explicite
+                        wikiTitle = name;
                     }
 
                     const redMarker = L.circleMarker([itemLat, itemLon], {
@@ -647,9 +648,9 @@
             });
 
             if (count === 0) {
-                setStatus("Aucun point avec nom trouvé dans cette zone.");
+                setStatus("Aucun monument nommé trouvé dans cette zone.");
             } else {
-                setStatus(`Zone prête (${count} lieu${count > 1 ? 'x' : ''}). Cliquez sur un point rouge.`);
+                setStatus(`Zone prête (${count} site${count > 1 ? 's' : ''} touristique${count > 1 ? 's' : ''}). Cliquez sur un point rouge.`);
             }
 
         } catch (err) {
@@ -1058,6 +1059,69 @@
 
         if (!isPausedState) {
             synth.cancel();
+            isPausedState = true;
+            pauseElapsedMs += Date.now() - speechStartTime;
+            if (progressInterval) clearInterval(progressInterval);
+            document.getElementById('play-pause-btn').innerText = "▶️ Lecture";
+            setStatus("Lecture en pause.");
+        } else {
+            isPausedState = false;
+            document.getElementById('play-pause-btn').innerText = "⏸️ Pause";
+            setStatus("Lecture audio en cours...");
+
+            currentUtterance = new SpeechSynthesisUtterance(currentSpokenText);
+            currentUtterance.lang = 'fr-FR';
+            
+            const bestVoice = getBestFrenchVoice();
+            if (bestVoice) {
+                currentUtterance.voice = bestVoice;
+            }
+
+            const speedSelect = document.getElementById('speed-select');
+            const speechRate = parseFloat(speedSelect.value);
+            currentUtterance.rate = speechRate;
+
+            speechStartTime = Date.now();
+
+            if (progressInterval) clearInterval(progressInterval);
+            progressInterval = setInterval(() => {
+                if (!synth.speaking && !synth.paused) return;
+
+                if (!isPausedState) {
+                    const elapsed = Date.now() - speechStartTime + pauseElapsedMs;
+                    const progressRatio = Math.min(1, elapsed / speechDurationMs);
+                    const progressPercent = progressRatio * 100;
+
+                    document.getElementById('progress-fill').style.width = progressPercent + '%';
+                    document.getElementById('current-time').innerText = formatTime(Math.min(speechDurationMs, elapsed) / 1000);
+
+                    if (carouselImages.length > 0) {
+                        const targetSlide = Math.min(
+                            carouselImages.length - 1, 
+                            Math.floor(progressRatio * carouselImages.length)
+                        );
+                        if (targetSlide !== currentSlideIndex) {
+                            goToSlide(targetSlide);
+                        }
+                    }
+                }
+            }, 200);
+
+            currentUtterance.onend = () => {
+                clearInterval(progressInterval);
+                document.getElementById('progress-fill').style.width = "100%";
+                document.getElementById('current-time').innerText = formatTime(speechDurationMs / 1000);
+                setStatus("Lecture terminée.");
+                document.getElementById('play-pause-btn').disabled = true;
+                document.getElementById('play-pause-btn').innerText = "▶️ Lecture";
+            };
+
+            currentUtterance.onerror = (e) => {
+                clearInterval(progressInterval);
+                setStatus("Erreur lors de la reprise audio.");
+            };
+
+            synth.speak(currentUtterance);
         }
     }
 </script>
