@@ -90,7 +90,6 @@
             box-shadow: none;
         }
         
-        /* Conteneur de la Carte affiché immédiatement */
         #map-container {
             width: 100%;
             margin: 12px 0;
@@ -105,7 +104,6 @@
             box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
         
-        /* Double bouton GPS et Recherche sur la même ligne */
         .gps-row {
             display: flex;
             gap: 8px;
@@ -176,7 +174,6 @@
             display: none;
         }
         
-        /* Paramètres (Durée et Vitesse) alignés sur une seule ligne */
         .config-row {
             display: flex;
             gap: 6px;
@@ -435,7 +432,7 @@
         <a id="wikipedia-link" href="#" target="_blank">📖 Lire l'article complet sur Wikipédia</a>
     </div>
 
-    <div class="app-version">2026.11.9.7</div>
+    <div class="app-version">2026.11.9.8</div>
 </div>
 
 <script>
@@ -573,11 +570,19 @@
         );
     }
 
-    // Recherche les lieux en fonction de l'emprise visible sur la carte
     function searchPOIsOnCurrentView() {
         const bounds = map.getBounds();
         const southWest = bounds.getSouthWest();
         const northEast = bounds.getNorthEast();
+        
+        // Sécurité anti-zoom trop large pour éviter de surcharger Overpass
+        const latSpan = northEast.lat - southWest.lat;
+        const lngSpan = northEast.lng - southWest.lng;
+        if (latSpan > 0.5 || lngSpan > 0.5) {
+            setStatus("Zone trop grande ! Zoomez un peu plus sur la carte avant de rechercher.");
+            return;
+        }
+
         fetchPOIsBox(southWest.lat, southWest.lng, northEast.lat, northEast.lng);
     }
 
@@ -600,15 +605,19 @@
                   relation["amenity"="place_of_worship"](${s},${w},${n},${e});
 
                   node["leisure"="park"](${s},${w},${n},${e});
-                  way["leisure"="park"](${s},${w},${n},${e});
+                  way["leisure"](${s},${w},${n},${e});
                   relation["leisure"="park"](${s},${w},${n},${e});
                 );
                 out center;
             `;
             const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
             const response = await fetch(overpassUrl);
-            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(`Erreur HTTP: ${response.status}`);
+            }
 
+            const data = await response.json();
             poiLayerGroup.clearLayers();
 
             if (!data.elements || data.elements.length === 0) {
@@ -648,11 +657,15 @@
                 }
             });
 
-            setStatus(`Zone prête (${count} lieu${count > 1 ? 'x' : ''} touristique${count > 1 ? 's' : ''}). Cliquez sur un point rouge.`);
+            if (count === 0) {
+                setStatus("Lieux trouvés, mais aucun ne possède d'article Wikipédia associé dans cette zone.");
+            } else {
+                setStatus(`Zone prête (${count} lieu${count > 1 ? 'x' : ''} touristique${count > 1 ? 's' : ''}). Cliquez sur un point rouge.`);
+            }
 
         } catch (err) {
             console.error("Erreur chargement Overpass POIs:", err);
-            setStatus("Erreur lors du chargement des points d'intérêt.");
+            setStatus("Erreur lors de la requête Overpass (réseau ou surcharge). Réessayez.");
         }
     }
 
