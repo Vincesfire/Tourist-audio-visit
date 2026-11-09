@@ -432,7 +432,7 @@
         <a id="wikipedia-link" href="#" target="_blank">📖 Lire l'article complet sur Wikipédia</a>
     </div>
 
-    <div class="app-version">2026.11.9.9</div>
+    <div class="app-version">2026.11.9.10</div>
 </div>
 
 <script>
@@ -570,81 +570,91 @@
         );
     }
 
-    // Recherche ultra-rapide via Nominatim (OpenStreetMap Search Indexé)
+    // Recherche ultra-rapide et tolérante par emprise géographique via Overpass optimisé
     async function searchPOIsOnCurrentView() {
         const bounds = map.getBounds();
-        const south = bounds.getSouth();
-        const west = bounds.getWest();
-        const north = bounds.getNorth();
-        const east = bounds.getEast();
+        const s = bounds.getSouth();
+        const w = bounds.getWest();
+        const n = bounds.getNorth();
+        const e = bounds.getEast();
 
-        setStatus("Recherche instantanée des lieux...");
+        setStatus("Recherche rapide des lieux...");
 
         try {
-            // Utilisation de Nominatim avec l'emprise visuelle (viewbox) et le paramètre extra_tags pour cibler Wikipédia
-            const url = `https://nominatim.openstreetmap.org/search?format=json&bounded=1&viewbox=${west},${north},${east},${south}&amenity=place_of_worship,historic,tourism,attraction&limit=30&extratags=1&accept-language=fr`;
+            const query = `
+                [out:json][timeout:15];
+                (
+                  node["tourism"](${s},${w},${n},${e});
+                  way["tourism"](${s},${w},${n},${e});
+                  node["historic"](${s},${w},${n},${e});
+                  way["historic"](${s},${w},${n},${e});
+                  node["amenity"="place_of_worship"](${s},${w},${n},${e});
+                  way["amenity"="place_of_worship"](${s},${w},${n},${e});
+                  node["leisure"="park"](${s},${w},${n},${e});
+                );
+                out center 50;
+            `;
+            const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+            const response = await fetch(overpassUrl);
             
-            const response = await fetch(url, {
-                headers: {
-                    'Accept-Language': 'fr'
-                }
-            });
-
             if (!response.ok) throw new Error("Erreur réseau");
 
             const data = await response.json();
             poiLayerGroup.clearLayers();
 
-            if (!data || data.length === 0) {
-                setStatus("Aucun lieu touristique indexé trouvé dans cette vue.");
+            if (!data.elements || data.elements.length === 0) {
+                setStatus("Aucun lieu trouvé dans cette vue. Zoomez ou déplacez la carte.");
                 return;
             }
 
             let count = 0;
-            data.forEach(item => {
-                const lat = parseFloat(item.lat);
-                const lon = parseFloat(item.lon);
-                const name = item.display_name ? item.display_name.split(',')[0] : "Lieu d'intérêt";
+            data.elements.forEach(el => {
+                const itemLat = el.lat || (el.center && el.center.lat);
+                const itemLon = el.lon || (el.center && el.center.lon);
                 
-                // Récupération intelligente du titre Wikipédia si présent dans les tags extra
-                let wikiTitle = null;
-                if (item.extratags) {
-                    if (item.extratags.wikipedia) {
-                        wikiTitle = item.extratags.wikipedia.includes(':') ? item.extratags.wikipedia.split(':')[1] : item.extratags.wikipedia;
-                    } else if (item.extratags['wikipedia:fr']) {
-                        wikiTitle = item.extratags['wikipedia:fr'];
+                if (itemLat && itemLon && el.tags) {
+                    const name = el.tags.name || el.tags.historic || el.tags.tourism || "Lieu d'intérêt";
+                    let wikiTitle = null;
+
+                    if (el.tags.wikipedia) {
+                        wikiTitle = el.tags.wikipedia.includes(':') ? el.tags.wikipedia.split(':')[1] : el.tags.wikipedia;
+                    } else if (el.tags['wikipedia:fr']) {
+                        wikiTitle = el.tags['wikipedia:fr'];
+                    } else {
+                        wikiTitle = name; // Fallback direct sur le nom si pas de tag wiki explicite
                     }
+
+                    const redMarker = L.circleMarker([itemLat, itemLon], {
+                        radius: 7,
+                        fillColor: "#ff4d4d",
+                        color: "#ffffff",
+                        weight: 2,
+                        opacity: 1,
+                        fillOpacity: 0.9
+                    });
+
+                    redMarker.bindPopup(`<b>${name}</b><br><small>Cliquez pour écouter l'explication</small>`);
+                    
+                    redMarker.on('click', () => {
+                        resetUI();
+                        setStatus(`Chargement de : "${wikiTitle}"...`);
+                        fetchFullArticleByTitle(wikiTitle);
+                    });
+
+                    poiLayerGroup.addLayer(redMarker);
+                    count++;
                 }
-                if (!wikiTitle) {
-                    wikiTitle = name; // Fallback sur le nom du lieu
-                }
-
-                const redMarker = L.circleMarker([lat, lon], {
-                    radius: 7,
-                    fillColor: "#ff4d4d",
-                    color: "#ffffff",
-                    weight: 2,
-                    opacity: 1,
-                    fillOpacity: 0.9
-                });
-
-                redMarker.bindPopup(`<b>${name}</b><br><small>Cliquez pour écouter l'explication</small>`);
-                
-                redMarker.on('click', () => {
-                    resetUI();
-                    setStatus(`Chargement de : "${wikiTitle}"...`);
-                    fetchFullArticleByTitle(wikiTitle);
-                });
-
-                poiLayerGroup.addLayer(redMarker);
-                count++;
             });
 
-            setStatus(`Zone prête (${count} lieu${count > 1 ? 'x' : ''}). Cliquez sur un point rouge.`);
+            if (count === 0) {
+                setStatus("Aucun point avec nom trouvé dans cette zone.");
+            } else {
+                setStatus(`Zone prête (${count} lieu${count > 1 ? 'x' : ''}). Cliquez sur un point rouge.`);
+            }
 
         } catch (err) {
-            console.error("Erreur recherche rapide:", err);
-            setStatus("Erreur lors de la recherche rapide des lieux.");
+            console.error("Erreur Overpass:", err);
+            setStatus("Erreur lors de la recherche. Réessayez.");
         }
     }
 
@@ -1048,69 +1058,6 @@
 
         if (!isPausedState) {
             synth.cancel();
-            isPausedState = true;
-            pauseElapsedMs += Date.now() - speechStartTime;
-            if (progressInterval) clearInterval(progressInterval);
-            document.getElementById('play-pause-btn').innerText = "▶️ Lecture";
-            setStatus("Lecture en pause.");
-        } else {
-            isPausedState = false;
-            document.getElementById('play-pause-btn').innerText = "⏸️ Pause";
-            setStatus("Lecture audio en cours...");
-
-            currentUtterance = new SpeechSynthesisUtterance(currentSpokenText);
-            currentUtterance.lang = 'fr-FR';
-            
-            const bestVoice = getBestFrenchVoice();
-            if (bestVoice) {
-                currentUtterance.voice = bestVoice;
-            }
-
-            const speedSelect = document.getElementById('speed-select');
-            const speechRate = parseFloat(speedSelect.value);
-            currentUtterance.rate = speechRate;
-
-            speechStartTime = Date.now();
-
-            if (progressInterval) clearInterval(progressInterval);
-            progressInterval = setInterval(() => {
-                if (!synth.speaking && !synth.paused) return;
-
-                if (!isPausedState) {
-                    const elapsed = Date.now() - speechStartTime + pauseElapsedMs;
-                    const progressRatio = Math.min(1, elapsed / speechDurationMs);
-                    const progressPercent = progressRatio * 100;
-
-                    document.getElementById('progress-fill').style.width = progressPercent + '%';
-                    document.getElementById('current-time').innerText = formatTime(Math.min(speechDurationMs, elapsed) / 1000);
-
-                    if (carouselImages.length > 0) {
-                        const targetSlide = Math.min(
-                            carouselImages.length - 1, 
-                            Math.floor(progressRatio * carouselImages.length)
-                        );
-                        if (targetSlide !== currentSlideIndex) {
-                            goToSlide(targetSlide);
-                        }
-                    }
-                }
-            }, 200);
-
-            currentUtterance.onend = () => {
-                clearInterval(progressInterval);
-                document.getElementById('progress-fill').style.width = "100%";
-                document.getElementById('current-time').innerText = formatTime(speechDurationMs / 1000);
-                setStatus("Lecture terminée.");
-                document.getElementById('play-pause-btn').disabled = true;
-                document.getElementById('play-pause-btn').innerText = "▶️ Lecture";
-            };
-
-            currentUtterance.onerror = (e) => {
-                clearInterval(progressInterval);
-                setStatus("Erreur lors de la reprise audio.");
-            };
-
-            synth.speak(currentUtterance);
         }
     }
 </script>
